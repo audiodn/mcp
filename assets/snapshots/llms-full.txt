@@ -1,0 +1,366 @@
+# AudioDN — Full LLM-readable site dump
+
+> AudioDN (Audio Delivery Network) is audio delivery infrastructure for developers and creators. One API and a drop-in web component handle upload, transcoding, signed delivery, and playback. Built on Cloudflare's global edge network.
+
+This file is a deeper companion to /llms.txt, intended for AI agents that want a single document containing the product surface, integration paths, full API endpoint inventory, pricing, and trust posture.
+
+---
+
+## 1. Product overview
+
+AudioDN provides infrastructure for audio delivery:
+
+- Audio file uploading and processing (resumable, direct-to-storage signed URLs)
+- Automatic variant generation: high-quality MP3, low-bandwidth MP3, preview clip, waveform image/video, analysis JSON
+- Secure streaming with session-based access control (scoped, time-gated URLs)
+- Embeddable Player and Uploader web components
+- Multi-tenant support via Organizations, Collections, Tracks, and Creators
+
+## 2. Audiences
+
+AudioDN is developer-primary with a dashboard-led path for creators.
+
+- **Developers** — REST API, OpenAPI 3.1 spec, drop-in web components, scoped client-side keys.
+- **Platforms** (SaaS, marketplaces, media platforms) — server-provisioned upload and play sessions, webhooks, multi-tenant collections.
+- **Creators** (no-code) — dashboard-led upload, embed snippets, time-limited share links. See https://audiodeliverynetwork.com/for-creators.
+
+## 3. Integration approaches
+
+AudioDN supports three integration patterns that can be mixed and matched:
+
+### Client-side
+Use ADN web components (Player & Uploader) with Client-Side API Keys. The components handle all API calls behind the scenes — no backend required. Best for static sites, prototypes, and projects without a backend.
+
+### Server-side
+Use ADN's API directly from your server to store tracks and fetch them for playback. Build fully custom upload and player experiences without ADN components. Required for mobile apps, custom players, and platforms needing fine-grained access control.
+
+### Hybrid
+Use ADN's API server-to-server to provision upload and play sessions, then pass those session IDs to ADN's web components on the frontend. Your backend controls who can upload and play; the components handle the UI. Best for SaaS products, paywalled content, and subscription services.
+
+Detailed guides:
+- https://audiodeliverynetwork.com/docs/integration/web
+- https://audiodeliverynetwork.com/docs/integration/mobile
+- https://audiodeliverynetwork.com/docs/integration/server-side
+- https://audiodeliverynetwork.com/docs/integration/hybrid
+
+## 4. Key concepts
+
+- **Organization** — a client account on AudioDN. Configures default branding, webhooks, billing.
+- **Collection** — a logical container for tracks (folder, album, podcast feed, course module).
+- **Track** — an individual audio file with metadata, status (`processing` → `ready`), and track files.
+- **Variant** — a reusable recipe defining an output to generate from every upload (e.g. HQ streaming, LQ streaming, preview clip, waveform). A track-specific variant can also be added after the fact.
+- **Track file** — the actual output of applying a variant to a track: the stored, deliverable file (audio, preview, waveform). Produced on upload, or added after the fact.
+- **Upload Session** — short-lived token for uploading one or more tracks to a collection.
+- **Play Session** — short-lived token granting access to specific tracks and variants. Configurable TTL, scopable to a single end-user identifier.
+- **Signed URL** — time-gated playback URL minted by a play session.
+- **Client-Side API Key** — scoped key for embedding in web/mobile (Player role: read playback; Uploader role: write to one collection).
+- **Inline Share Key** — public no-auth URL key that redirects to a single track variant. Key is in the URL path; each request mints a fresh signed CDN URL. See https://audiodeliverynetwork.com/docs/api/share.
+- **API Access Key** — full-access key for server-to-server calls. Server-only.
+- **Creator** — a sub-account under a client (artist, podcaster, contributor) used for usage tracking, access control, and analytics.
+
+## 5. URLs
+
+- Marketing site: https://audiodeliverynetwork.com
+- Documentation: https://audiodeliverynetwork.com/docs
+- API base URL: https://api.audiodelivery.net (all endpoints prefixed with /v1)
+- OpenAPI 3.1 spec: https://audiodeliverynetwork.com/openapi.json
+- Markdown docs tree: https://audiodeliverynetwork.com/docs/llms-tree.md (every docs page is also available as clean Markdown at its `.md` twin)
+- AI-agent integration guide: https://audiodeliverynetwork.com/for-ai-agents
+- Account dashboard: https://account.audiodeliverynetwork.com
+- Status: https://status.audiodeliverynetwork.com
+- Components (npm): @audiodn/components — https://www.npmjs.com/package/@audiodn/components
+
+## 6. Authentication
+
+Most API endpoints require a bearer token in the `Authorization` header:
+
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+Security boundary — a few upload and playback endpoints are authorized by a session ID in the URL (a capability token) instead of a bearer token, so they are safe to call from an untrusted client and must **not** be sent an API key:
+
+- `GET /v1/upload_session/{upload_session_id}`
+- `POST /v1/upload/{upload_session_id}/track`
+- `GET /v1/play/{play_session_id}/{play_track_id}`
+- `GET /v1/play/{play_session_id}/{play_track_id}/{variant_index}/download`
+
+Key roles:
+
+- **Server-side API key** — full access. Mint and store on the server only.
+- **Client-side keys** — scoped to a single collection or track. Roles: Player (read-only playback) and Uploader (write to one collection). Safe to embed in browsers and mobile apps.
+
+Mint, scope, and rotate keys at https://account.audiodeliverynetwork.com (Settings → API Keys).
+
+## 7. API endpoint inventory
+
+All endpoints are prefixed with `/v1/`. Complete schemas at https://audiodeliverynetwork.com/openapi.json.
+
+### Organizations
+- `GET /v1/organization/{organization_id}` — get organization
+- `PUT /v1/organization/{organization_id}` — update organization
+
+### Creators
+- `GET /v1/creator` — list creators (limit, offset)
+- `GET /v1/creator/{creator_id}` — get creator
+- `POST /v1/creator` — create creator (organization_index required; provisions and links a storage folder)
+- `PUT /v1/creator/{creator_id}` — update creator
+- `DELETE /v1/creator/{creator_id}` — delete creator
+
+### Collections
+- `GET /v1/collection` — list collections (limit, offset)
+- `GET /v1/collection/{collection_id}` — get collection
+- `POST /v1/collection` — create collection (title required)
+- `PUT /v1/collection/{collection_id}` — update collection
+- `DELETE /v1/collection/{collection_id}` — delete collection
+- `GET /v1/collection/{collection_id}/track` — list tracks in collection
+
+### Tracks
+- `GET /v1/track/{track_id}` — get track
+- `POST /v1/track` — create track (collection_id, file_name required)
+- `PUT /v1/track/{track_id}` — update track
+- `DELETE /v1/track/{track_id}` — delete track
+
+### Cover images
+- `POST /v1/collection/{collection_id}/cover` — generate collection cover upload URL
+- `POST /v1/track/{track_id}/cover` — generate track cover upload URL
+
+### Upload sessions
+- `POST /v1/upload_session` — create upload session (requires Bearer auth; `collection_id` required unless the API key is scoped to a collection). Returns `upload_session_id` only — not an upload URL.
+- `GET /v1/upload_session/{upload_session_id}` — get upload session (no Bearer required; the session ID authorizes the request)
+- `POST /v1/upload/{upload_session_id}/track` — create a track within an upload session (one request per file; no Bearer required — the session ID authorizes it). Returns `track_id` and a per-track signed URL in `track_upload.upload_url`.
+
+### Play sessions
+- `POST /v1/play_session/{scope}` — create play session; scope is `collection` or `track` (`playlist` is reserved but not yet supported — the API currently returns 400)
+- `GET /v1/play_session/{play_session_id}` — get play session
+- `GET /v1/play/{play_session_id}/{play_track_id}` — get a specific track in a play session, including signed variant URLs (no Bearer required; the session ID authorizes it)
+- `GET /v1/play/{play_session_id}/{play_track_id}/{variant_index}/download` — redirect to a signed download URL for one variant (no Bearer required; only when the play session is downloadable)
+
+### Variants
+- `GET /v1/variant` — list variants (limit, offset)
+- `GET /v1/variant/{variant_id}` — get variant
+- `POST /v1/track/{track_id}/variant` — add a track-specific variant to an already-processed track and queue processing. Types: `transcode`, `preview`. Codec settings optional (default `aac`/128 kbps); lossy codecs only (`aac`, `mp3`, `ogg`, `opus`). Requires a unique `index`. Bumps the track to `processing`, then back to `ready`.
+
+### Track upload lifecycle
+
+When a file is uploaded to AudioDN, it moves through these stages:
+
+1. **Create upload session** — your app requests an upload session via the API (or the uploader component does it automatically with a Client-Side API key). The API returns an `upload_session_id`. A session can hold many tracks and does not itself return an upload URL.
+2. **Create a track in the session** — for each file, make a separate `POST /v1/upload/{upload_session_id}/track` request. The response includes `track_id` and a per-track signed URL in `track_upload.upload_url`. The session ID authorizes this request, so no API key is required.
+3. **Upload file** — the audio file is uploaded directly to storage with a `PUT` to `track_upload.upload_url`. Once the upload completes, processing begins automatically.
+4. **Initialization** — ADN probes the file to extract duration, codec info, and stream metadata. A default 320-sample waveform is generated for the player.
+5. **Variant processing** — each configured variant (transcodes, previews, analysis, waveform images/videos) is processed in parallel. Track status is `processing`.
+6. **Fallback processing** — if a file is too large or hits resource limits, the job is automatically retried on a higher-capacity processor. Status becomes `fallback_processing`. No action needed from your side.
+7. **Cover image and color extraction** — if the audio file contains embedded cover art, ADN extracts it, uploads it to the image CDN, and scans for a color palette. The most vibrant color is auto-selected as the `player_color` for theming. Responses and webhook payloads also include two derived, read-only companions: `player_color_light` and `player_color_dark`, contrast-adjusted variants of `player_color` for drawing on light and dark backgrounds respectively.
+8. **Track ready** — once all variants finish, status is set to `ready` (or `incomplete` if some variants failed but at least one playable variant succeeded). Wait for this state (poll `GET /v1/track/{track_id}` or use a webhook) before minting a play session or signing delivery URLs.
+9. **Webhook notification** — if a webhook URL is configured on the organization, ADN sends a `POST` on **notable outcomes only** (terminal status `ready`/`incomplete`/`error`/`init_error`, or when `track.files_completed_at` is stamped once every variant is done — transitional statuses are not delivered) with the track ID, status, previous status, file details, and metadata. For per-file progress use the Track File webhook. See the Webhooks section below.
+
+### Webhooks
+
+The Track Processing webhook fires only on events of note — a terminal status, or when `track.files_completed_at` is set once all variants (including optional/after-the-fact) have been attempted. Transitional statuses (`processing`, `fallback`, `fallback_processing`) and the initial `initialized` state are not delivered; use the Track File webhook for per-file progress. It is configured in the dashboard Settings → Webhook panel (not via the API), and stored as `organization.webhook_url`.
+
+- **Transport**: HTTP `POST`, `Content-Type: application/json`, header `X-ADN-Event: track.status_changed`.
+- **Delivery**: fire-and-forget / at-least-once; ordering not guaranteed; currently unsigned. Make handlers idempotent and key on `track_id` + `status`. A track with optional variants may deliver twice: an early `ready`, then a files-complete event.
+- **Statuses delivered**: terminal only — `ready`, `incomplete`, `error`, `init_error` (plus a delivery when `files_completed_at` changes). Transitional statuses (`initialized`, `processing`, `fallback`, `fallback_processing`) are not delivered.
+- **Payload shape**:
+
+```json
+{
+  "event": "track.status_changed",
+  "status": "ready | incomplete | error | init_error",
+  "previous_status": "string | null",
+  "organization_id": "uuid",
+  "creator_id": "uuid | null",
+  "collection_id": "uuid",
+  "track_id": "uuid",
+  "upload_session_id": "uuid | null",
+  "track": { "id": "uuid", "track_status_id": "string", "index": "string", "organization_index": "string | null", "file_name": "string | null", "file_name_original": "string | null", "player_title": "string | null", "player_subtitle": "string | null", "player_color": "string | null", "player_color_light": "string | null", "player_color_dark": "string | null", "order": "number", "format": "object | null", "metadata": "object | null", "duration": "number | null", "size": "number | null", "files_completed_at": "string | null" },
+  "files": [ { "id": "uuid", "path": "string", "url": "string | null", "size": "number | null", "content_type": "string | null", "file_name": "string", "is_public": "boolean", "is_success": "boolean", "status_text": "string | null", "variant": { "id": "uuid", "index": "string", "variant_type": { "id": "string", "viewer_id": "string", "title": "string" } } } ]
+}
+```
+
+`track.files_completed_at` is `null` on an early `ready` (optional variants still running) and a timestamp once the full set is done. A failed variant appears in `files` with `is_success: false`, `url: null`, and the reason in `status_text`. Full reference: https://audiodeliverynetwork.com/docs/webhooks/track-processing.
+
+The Track File webhook fires once per track file (rather than once per track), so integrations do not have to unpack the full `files[]` array. It is configured in the dashboard Settings → Webhook panel and stored as `organization.webhook_url_file`. Every track file — success or failure — is recorded as a `file` row, so a single Database Webhook on `public.file` INSERT drives both events (no separate `process` webhook).
+
+- **Events / status**: `track_file.created` (`status: "success"`, an output was stored, `file.is_success = true`) and `track_file.failed` (`status: "failed"`, a variant failed — a `file` row is still sent with `file.is_success = false`, `file.url = null`, and the reason in `message`).
+- **Transport**: HTTP `POST`, `Content-Type: application/json`, header `X-ADN-Event: <event>`.
+- **Delivery**: fire-and-forget / at-least-once; ordering not guaranteed; currently unsigned. Make handlers idempotent and key on `file_id` (or `track_id` + `file.variant.index`). Branch on `status` or `file.is_success`.
+- **Payload shape**:
+
+```json
+{
+  "event": "track_file.created | track_file.failed",
+  "status": "success | failed",
+  "organization_id": "uuid",
+  "creator_id": "uuid | null",
+  "collection_id": "uuid",
+  "track_id": "uuid",
+  "file_id": "uuid",
+  "message": "string | null",
+  "file": { "id": "uuid", "path": "string", "url": "string | null", "size": "number | null", "content_type": "string | null", "file_name": "string", "is_public": "boolean", "is_success": "boolean", "status_text": "string | null", "data": "object | null", "props": "object | null", "variant": { "id": "uuid", "index": "string", "variant_type": { "id": "string", "viewer_id": "string", "title": "string" } } }
+}
+```
+
+Full reference: https://audiodeliverynetwork.com/docs/webhooks/track-files.
+
+### Error envelope
+
+All endpoints may return:
+
+```json
+{
+  "ok": false,
+  "message": "string",
+  "api_request_id": "uuid"
+}
+```
+
+Common HTTP status codes: 200 (success), 400 (bad request), 401 (unauthorized), 404 (not found), 500 (internal server error).
+
+## 8. Web components
+
+Install from npm: `npm install @audiodn/components`. Import the component you need (e.g. `import '@audiodn/components/player'`), or load it from a CDN with `<script type="module" src="https://unpkg.com/@audiodn/components@latest/dist/player.js"></script>`.
+
+Custom element tag names: `<audiodn-player>`, `<audiodn-uploader>`, `<audiodn-waveform>`. HTML attribute names use hyphens (e.g. `api-key`, `collection-id`, `play-session-id`) while the JSON API uses underscores (e.g. `collection_id`, `play_session_id`).
+
+### Player
+```html
+<script type="module">
+  import '@audiodn/components/player'
+</script>
+<audiodn-player
+  api-key="YOUR_PLAYER_KEY"
+  scope="collection"
+  id="COLLECTION_ID"
+  variants="hq,lq"
+  size="large"
+></audiodn-player>
+```
+
+### Uploader
+```html
+<script type="module">
+  import '@audiodn/components/uploader'
+</script>
+<audiodn-uploader
+  api-key="YOUR_UPLOADER_KEY"
+  collection-id="COLLECTION_ID"
+></audiodn-uploader>
+```
+
+Component reference: https://audiodeliverynetwork.com/docs/components/player, https://audiodeliverynetwork.com/docs/components/uploader, https://audiodeliverynetwork.com/docs/components/waveform.
+
+## 9. Minimal setup
+
+1. Sign up at https://account.audiodeliverynetwork.com and mint a server-side API key.
+2. (Optional) Create a collection: `POST /v1/collection` with `{ "title": "..." }`.
+3. Mint an upload session: `POST /v1/upload_session` with `{ "collection_id": "..." }`. Response includes `upload_session_id`.
+4. Create a track within the session: `POST /v1/upload/{upload_session_id}/track` with `{ "file_name": "..." }` (no Bearer needed; the session ID authorizes it). Response includes `track_id` and `track_upload.upload_url`. Upload the audio bytes (PUT) to that signed URL. Repeat this step once per file.
+5. Wait for the track to finish processing: poll `GET /v1/track/{track_id}` until `track.track_status_id` is `ready`, or use the track-processing webhook.
+6. Mint a play session: `POST /v1/play_session/track` with `{ "track_id": "...", "variants": ["hq", "lq"] }`. Response includes signed playback URLs in `first_track.variants[].url`.
+
+## 10. Pricing
+
+All plans include free processing, unlimited plays, and zero egress fees. Plans differ by storage, max track length, and max file size.
+
+| Plan | Launch sale | Standard | Storage | Max track | Max file |
+|---|---|---|---|---|---|
+| Creator | $4.99/mo | $9.99/mo | 10 GB | 30 min | 200 MB |
+| Business | $14.99/mo | $19.99/mo | 50 GB (overage $1 / 5 GB) | 60 min | 500 MB |
+| Platform & Enterprise | — | $499/mo | 1 TB ($499/TB overage) | 120 min | 1 GB+ |
+
+Creator and Business plans include a 30-day free trial.
+
+Full pricing page: https://audiodeliverynetwork.com/pricing
+
+## 11. Trust and security
+
+- **Encryption**: TLS 1.2+ in transit. AES-256 at rest.
+- **Signed URLs**: time-gated, scoped to a track or collection, configurable TTL.
+- **Key scoping**: client-side keys are limited to a single resource and a single role (Player or Uploader).
+- **Server-side keys**: never appear in browsers; can be rotated without invalidating in-flight sessions.
+- **Sub-processors**: Cloudflare (R2, Workers, edge cache), Stripe (billing).
+- **AI training**: we do not train models on your audio.
+- **Compliance posture**: SOC 2 in progress. GDPR DPA available on request.
+- **Responsible disclosure**: security@audiodeliverynetwork.com
+
+## 12. Documentation map
+
+Every page below is also available as clean Markdown by appending `.md` to its URL
+(e.g. https://audiodeliverynetwork.com/docs/api/tracks.md).
+
+- https://audiodeliverynetwork.com/docs — Overview, integration paths, glossary
+- https://audiodeliverynetwork.com/docs/variant-types — Available variant types
+- https://audiodeliverynetwork.com/docs/api — API reference overview
+- https://audiodeliverynetwork.com/docs/api/organizations — Organization endpoints
+- https://audiodeliverynetwork.com/docs/api/creators — Creator endpoints
+- https://audiodeliverynetwork.com/docs/api/collections — Collection endpoints
+- https://audiodeliverynetwork.com/docs/api/tracks — Track endpoints
+- https://audiodeliverynetwork.com/docs/api/covers — Cover image endpoints
+- https://audiodeliverynetwork.com/docs/api/upload-sessions — Upload session endpoints
+- https://audiodeliverynetwork.com/docs/api/play-sessions — Play session endpoints
+- https://audiodeliverynetwork.com/docs/api/signing-keys — URL Signing keys (HMAC delivery URLs)
+- https://audiodeliverynetwork.com/docs/api/share — Inline Share keys
+- https://audiodeliverynetwork.com/docs/api/variants — Variant endpoints
+- https://audiodeliverynetwork.com/docs/webhooks/track-processing — Track Processing webhook (fires on terminal status / files_completed_at only)
+- https://audiodeliverynetwork.com/docs/webhooks/track-files — Track File webhook (fires once per track file; status success/failed, both delivered as file rows)
+- https://audiodeliverynetwork.com/docs/webhooks/collection-sync — Collection Sync webhook (collection create/update/delete events)
+- https://audiodeliverynetwork.com/docs/integration/web — Drop-in component setup
+- https://audiodeliverynetwork.com/docs/integration/mobile — iOS, Android, Flutter
+- https://audiodeliverynetwork.com/docs/integration/server-side — Full API control
+- https://audiodeliverynetwork.com/docs/integration/hybrid — Server-provisioned sessions with components
+- https://audiodeliverynetwork.com/docs/integration/signed-delivery — Sign URLs yourself, skip play sessions for public tracks
+- https://audiodeliverynetwork.com/docs/components/player — Player web component
+- https://audiodeliverynetwork.com/docs/components/uploader — Uploader web component
+- https://audiodeliverynetwork.com/docs/components/waveform — Waveform web component
+- https://audiodeliverynetwork.com/docs/recipes — Recipes + runnable examples index
+- https://audiodeliverynetwork.com/docs/recipes/private-podcast — Entitlement-gated private podcast
+- https://audiodeliverynetwork.com/docs/recipes/preview-and-waveform — Preview clips + waveform workflow
+- https://audiodeliverynetwork.com/docs/recipes/vue-secure-upload — Secure upload in Vue / Nuxt
+- https://audiodeliverynetwork.com/docs/roadmap — Feature roadmap
+
+## 13. Recipes and runnable examples
+
+Task-oriented recipes live under https://audiodeliverynetwork.com/docs/recipes. Each recipe
+covers when to use it, architecture, the server/client boundary, environment variables,
+complete code, correct auth (Bearer only server-side; per-track create and play GET use NO
+Bearer), the full upload lifecycle (create session -> per-track create -> PUT bytes -> wait
+for `ready` -> playback/delivery), expected errors, testing, deployment, and links to the
+exact OpenAPI operations (now carrying `operationId`s in https://audiodeliverynetwork.com/openapi.json).
+
+Two runnable projects ship in the AudioDN repository, each with a README.md and an AGENTS.md:
+
+- examples/nextjs-secure-upload — Next.js App Router. A server route mints the upload session
+  with a server-only API key; the browser creates the per-track URL (no key), PUTs bytes, polls
+  a server proxy until `ready`, then plays back with `<audiodn-player>`.
+- examples/cloudflare-worker-signed-playback — a Cloudflare Worker that signs delivery URLs at
+  the edge with an HMAC URL Signing key kept in Worker secrets, returning a ready-to-play URL.
+- examples/shared (@audiodn/recipe-kit) — dependency-free `fetch` + Web Crypto helpers
+  (`createUploadSession`, `createTrackInSession`, `putBytes`, `waitForReady`, `createPlaySession`,
+  `getPlayTrack`, `signDeliveryUrl`) reused by both examples and mirrored in the recipes.
+
+## 14. AudioDN Agent Kit (coding-agent setup)
+
+If you are an AI coding agent working in a developer's repository, do not guess at the API —
+install AudioDN's own guidance and a validator. The kit is published independently on npm as
+@audiodn/agent-kit (https://www.npmjs.com/package/@audiodn/agent-kit).
+
+- `npx @audiodn/agent-kit init` — installs merge-safe guidance in the formats agents read:
+  AGENTS.md, CLAUDE.md, .github/copilot-instructions.md, .cursor/rules/audiodn.mdc, and a portable
+  Skill under .agents/skills/audiodn/ (SKILL.md + auth/upload/processing/playback/webhooks/security
+  references + framework templates). Idempotent; never clobbers existing content; supports
+  --dry-run, --force, --formats, and uninstall.
+- `npx @audiodn/agent-kit validate .` — scans a project for eight common mistakes: server key in
+  client code, invented endpoints (checked against the bundled OpenAPI), missing per-track upload
+  request, treating an upload URL as permanent, playback before `ready`, hardcoded secrets,
+  incorrect API origin (marketing host instead of api.audiodelivery.net), and obsolete doc URLs.
+
+The guidance and endpoint list derive from this site's canonical OpenAPI and llms-full.txt via a
+one-way sync, so the kit stays consistent with the API without the site depending on it.
+
+## 15. Contact
+
+- Sales: sales@audiodeliverynetwork.com
+- Support: support@audiodeliverynetwork.com
+- Security: security@audiodeliverynetwork.com

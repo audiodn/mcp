@@ -1,0 +1,10 @@
+# Publish only build output + assets (see package.json "files").
+src/
+test/
+scripts/
+.github/
+tsconfig.json
+vitest.config.ts
+*.tsbuildinfo
+coverage/
+CHANGELOG.md

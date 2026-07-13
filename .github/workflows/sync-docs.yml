@@ -1,0 +1,33 @@
+name: Sync canonical docs
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Refresh snapshots from the public AudioDN site
+        run: npm run sync
+      - name: Open a PR if snapshots changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'chore: sync canonical AudioDN snapshots'
+          title: 'chore: sync canonical AudioDN snapshots'
+          body: |
+            Automated refresh of `assets/snapshots/*` from the public AudioDN site.
+            Review the diff and bump the version before releasing.
+          branch: chore/sync-canonical
+          delete-branch: true

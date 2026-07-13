@@ -1,0 +1,1416 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AudioDN API",
+    "version": "1.0.0",
+    "summary": "Audio delivery infrastructure: upload, transcode, secure delivery, and playback.",
+    "description": "AudioDN provides a REST API and embeddable web components for managing and delivering audio at scale.\n\nAuthentication: bearer token via the `Authorization` header. Use a server-side API key for full access; mint scoped client-side keys (Player or Uploader) for browsers and mobile apps.\n\nAll endpoints are prefixed with `/v1/`.",
+    "contact": {
+      "name": "Audio Delivery Network",
+      "email": "support@audiodeliverynetwork.com",
+      "url": "https://audiodeliverynetwork.com"
+    },
+    "license": {
+      "name": "Proprietary"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.audiodelivery.net",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    { "name": "API Keys" },
+    { "name": "Organizations" },
+    { "name": "Creators" },
+    { "name": "Collections" },
+    { "name": "Tracks" },
+    { "name": "Cover Images" },
+    { "name": "Upload Sessions" },
+    { "name": "Play Sessions" },
+    { "name": "Variants" }
+  ],
+  "security": [{ "BearerAuth": [] }],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Server-side API key. Use scoped client-side keys for browser and mobile contexts."
+      }
+    },
+    "parameters": {
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+      },
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "schemas": {
+      "OkEnvelope": {
+        "type": "object",
+        "required": ["ok", "api_request_id"],
+        "properties": {
+          "ok": { "type": "boolean", "const": true },
+          "api_request_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["ok", "message"],
+        "properties": {
+          "ok": { "type": "boolean", "const": false },
+          "message": { "type": "string" },
+          "api_request_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "ImageColor": {
+        "type": "object",
+        "properties": {
+          "hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+          "area": { "type": "number" },
+          "lightness": { "type": "number" },
+          "saturation": { "type": "number" }
+        }
+      },
+      "UploadHandle": {
+        "type": "object",
+        "properties": {
+          "method": { "type": "string", "enum": ["PUT", "POST"] },
+          "upload_url": { "type": "string", "format": "uri" },
+          "ttl": { "type": "integer" },
+          "expires_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "theme": { "type": "array", "items": { "$ref": "#/components/schemas/ImageColor" } },
+          "is_theme_overridable": { "type": "boolean" },
+          "is_cover_overridable": { "type": "boolean" },
+          "player_color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+          "player_color_light": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "readOnly": true, "description": "Derived read-only variant of player_color adjusted to stay legible on a light background." },
+          "player_color_dark": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "readOnly": true, "description": "Derived read-only variant of player_color adjusted to stay legible on a dark background." },
+          "player_subtitle": { "type": "string" }
+        }
+      },
+      "Creator": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "organization_id": { "type": "string", "format": "uuid" },
+          "folder_id": { "type": "string", "format": "uuid" },
+          "organization_index": { "type": "string" },
+          "metadata": { "type": "object", "additionalProperties": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Collection": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "creator_id": { "type": "string", "format": "uuid" },
+          "organization_index": { "type": "string" },
+          "title": { "type": "string" },
+          "metadata": { "type": "object", "additionalProperties": true },
+          "theme": { "type": "array", "items": { "$ref": "#/components/schemas/ImageColor" } },
+          "is_cover_overridable": { "type": "boolean" },
+          "is_theme_overridable": { "type": "boolean" },
+          "player_color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+          "player_color_light": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "readOnly": true, "description": "Derived read-only variant of player_color adjusted to stay legible on a light background." },
+          "player_color_dark": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "readOnly": true, "description": "Derived read-only variant of player_color adjusted to stay legible on a dark background." },
+          "player_subtitle": { "type": "string" }
+        }
+      },
+      "Track": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "collection_id": { "type": "string", "format": "uuid" },
+          "creator_id": { "type": "string", "format": "uuid" },
+          "file_name": { "type": "string" },
+          "duration": { "type": "number" },
+          "organization_index": { "type": "string" },
+          "metadata": { "type": "object", "additionalProperties": true },
+          "is_cover_overridable": { "type": "boolean" },
+          "is_theme_overridable": { "type": "boolean" },
+          "player_title": { "type": "string" },
+          "player_subtitle": { "type": "string" },
+          "player_color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+          "player_color_light": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "readOnly": true, "description": "Derived read-only variant of player_color adjusted to stay legible on a light background." },
+          "player_color_dark": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "readOnly": true, "description": "Derived read-only variant of player_color adjusted to stay legible on a dark background." },
+          "status": { "type": "string", "enum": ["initializing", "processing", "fallback_processing", "ready", "incomplete", "failed"] }
+        }
+      },
+      "Variant": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "description": "Variant kind (e.g. transcode, preview, waveform, analysis)." },
+          "format": { "type": "string" },
+          "bitrate": { "type": "integer" }
+        }
+      },
+      "UploadSession": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "creator_id": { "type": "string", "format": "uuid" },
+          "collection_id": { "type": "string", "format": "uuid" },
+          "organization_index": { "type": "string" },
+          "metadata": { "type": "object", "additionalProperties": true },
+          "expires_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PlaySession": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "creator_id": { "type": "string", "format": "uuid" },
+          "organization_index": { "type": "string" },
+          "metadata": { "type": "object", "additionalProperties": true },
+          "variants": { "type": "array", "items": { "type": "string" } },
+          "is_downloadable": { "type": "boolean" },
+          "expires_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing or invalid API key.",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+        }
+      },
+      "BadRequest": {
+        "description": "Invalid parameters.",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found.",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/api_key": {
+      "post": {
+        "tags": ["API Keys"],
+        "operationId": "createApiKey",
+        "summary": "Create API key",
+        "description": "Generate a new player, uploader, or share API key. Requires an API Access ('api') key; API Access keys themselves must be created in the dashboard.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "api_key_type_id"],
+                "properties": {
+                  "title": { "type": "string", "description": "Name of the API key" },
+                  "api_key_type_id": { "type": "string", "enum": ["player", "uploader", "share"], "description": "Type of key to create" },
+                  "collection_id": { "type": "string", "format": "uuid", "description": "Limit the key to a specific collection" },
+                  "track_id": { "type": "string", "format": "uuid", "description": "Limit the key to a specific track (requires collection_id)" },
+                  "creator_id": { "type": "string", "format": "uuid", "description": "Limit the key to a specific creator" },
+                  "variants": { "type": "array", "items": { "type": "string" }, "description": "Allowed variants. Required (exactly one) for share keys; optional for player keys" },
+                  "expires_at": { "type": "string", "format": "date-time", "description": "Optional expiration for all types; ignored for share keys" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "API key created. The full key is returned once and never stored in plaintext.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "api_key": { "type": "string", "description": "The full API key including org prefix (returned once)" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "description": "Forbidden — API Access keys must be created in the dashboard, or the caller key is not an API Access key" }
+        }
+      }
+    },
+    "/v1/organization/{organization_id}": {
+      "get": {
+        "tags": ["Organizations"],
+        "operationId": "getOrganization",
+        "summary": "Get organization",
+        "parameters": [
+          { "name": "organization_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "organization_id": { "type": "string", "format": "uuid" },
+                        "organization": { "$ref": "#/components/schemas/Organization" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Organizations"],
+        "operationId": "updateOrganization",
+        "summary": "Update organization",
+        "parameters": [
+          { "name": "organization_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Organization" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "organization_id": { "type": "string", "format": "uuid" },
+                        "organization": { "$ref": "#/components/schemas/Organization" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/creator": {
+      "get": {
+        "tags": ["Creators"],
+        "operationId": "listCreators",
+        "summary": "List creators",
+        "parameters": [
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Offset" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creators list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "count": { "type": "integer" },
+                        "creators": { "type": "array", "items": { "$ref": "#/components/schemas/Creator" } }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Creators"],
+        "operationId": "createCreator",
+        "summary": "Create creator",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["organization_index"],
+                "properties": {
+                  "organization_index": { "type": "string", "description": "Your external identifier for the creator (the remote service identifier)." },
+                  "metadata": { "type": "object", "additionalProperties": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Creator created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "creator_id": { "type": "string", "format": "uuid" },
+                        "creator": { "$ref": "#/components/schemas/Creator" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/creator/{creator_id}": {
+      "get": {
+        "tags": ["Creators"],
+        "operationId": "getCreator",
+        "summary": "Get creator",
+        "parameters": [
+          { "name": "creator_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creator details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "creator_id": { "type": "string", "format": "uuid" },
+                        "creator": { "$ref": "#/components/schemas/Creator" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Creators"],
+        "operationId": "updateCreator",
+        "summary": "Update creator",
+        "parameters": [
+          { "name": "creator_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organization_index": { "type": "string" },
+                  "metadata": { "type": "object", "additionalProperties": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated creator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "creator_id": { "type": "string", "format": "uuid" },
+                        "creator": { "$ref": "#/components/schemas/Creator" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["Creators"],
+        "operationId": "deleteCreator",
+        "summary": "Delete creator",
+        "parameters": [
+          { "name": "creator_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creator deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "creator_id": { "type": "string", "format": "uuid" },
+                        "deleted_creator": { "$ref": "#/components/schemas/Creator" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/collection": {
+      "get": {
+        "tags": ["Collections"],
+        "operationId": "listCollections",
+        "summary": "List collections",
+        "parameters": [
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Offset" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collections list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "count": { "type": "integer" },
+                        "collections": { "type": "array", "items": { "$ref": "#/components/schemas/Collection" } }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Collections"],
+        "operationId": "createCollection",
+        "summary": "Create collection",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                  "title": { "type": "string" },
+                  "creator_id": { "type": "string", "format": "uuid" },
+                  "organization_index": { "type": "string" },
+                  "metadata": { "type": "object", "additionalProperties": true },
+                  "theme": { "type": "array", "items": { "$ref": "#/components/schemas/ImageColor" } },
+                  "is_cover_overridable": { "type": "boolean" },
+                  "is_theme_overridable": { "type": "boolean" },
+                  "player_color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                  "player_subtitle": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Collection created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "collection_id": { "type": "string", "format": "uuid" },
+                        "collection": { "$ref": "#/components/schemas/Collection" },
+                        "collection_cover_upload": { "$ref": "#/components/schemas/UploadHandle" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/collection/{collection_id}": {
+      "get": {
+        "tags": ["Collections"],
+        "operationId": "getCollection",
+        "summary": "Get collection",
+        "parameters": [
+          { "name": "collection_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "collection_id": { "type": "string", "format": "uuid" },
+                        "collection": { "$ref": "#/components/schemas/Collection" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Collections"],
+        "operationId": "updateCollection",
+        "summary": "Update collection",
+        "parameters": [
+          { "name": "collection_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Collection" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "collection_id": { "type": "string", "format": "uuid" },
+                        "collection": { "$ref": "#/components/schemas/Collection" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["Collections"],
+        "operationId": "deleteCollection",
+        "summary": "Delete collection",
+        "parameters": [
+          { "name": "collection_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "collection_id": { "type": "string", "format": "uuid" },
+                        "deleted_collection": { "$ref": "#/components/schemas/Collection" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/collection/{collection_id}/track": {
+      "get": {
+        "tags": ["Tracks"],
+        "operationId": "listCollectionTracks",
+        "summary": "List tracks in a collection",
+        "parameters": [
+          { "name": "collection_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Offset" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tracks list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "count": { "type": "integer" },
+                        "tracks": { "type": "array", "items": { "$ref": "#/components/schemas/Track" } }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/collection/{collection_id}/cover": {
+      "post": {
+        "tags": ["Cover Images"],
+        "operationId": "createCollectionCover",
+        "summary": "Generate a collection cover image upload URL",
+        "parameters": [
+          { "name": "collection_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload handle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "collection_id": { "type": "string", "format": "uuid" },
+                        "collection": { "$ref": "#/components/schemas/Collection" },
+                        "collection_cover_upload": { "$ref": "#/components/schemas/UploadHandle" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/track": {
+      "post": {
+        "tags": ["Tracks"],
+        "operationId": "createTrack",
+        "summary": "Create a track",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["collection_id", "file_name"],
+                "properties": {
+                  "collection_id": { "type": "string", "format": "uuid" },
+                  "creator_id": { "type": "string", "format": "uuid" },
+                  "file_name": { "type": "string" },
+                  "organization_index": { "type": "string" },
+                  "metadata": { "type": "object", "additionalProperties": true },
+                  "is_cover_overridable": { "type": "boolean" },
+                  "is_theme_overridable": { "type": "boolean" },
+                  "player_title": { "type": "string" },
+                  "player_subtitle": { "type": "string" },
+                  "player_color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Track created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "track": { "$ref": "#/components/schemas/Track" },
+                        "track_upload": { "$ref": "#/components/schemas/UploadHandle" },
+                        "track_cover_upload": { "$ref": "#/components/schemas/UploadHandle" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/track/{track_id}": {
+      "get": {
+        "tags": ["Tracks"],
+        "operationId": "getTrack",
+        "summary": "Get track",
+        "parameters": [
+          { "name": "track_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Track details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "track": { "$ref": "#/components/schemas/Track" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Tracks"],
+        "operationId": "updateTrack",
+        "summary": "Update track",
+        "parameters": [
+          { "name": "track_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Track" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated track.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "track": { "$ref": "#/components/schemas/Track" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["Tracks"],
+        "operationId": "deleteTrack",
+        "summary": "Delete track",
+        "parameters": [
+          { "name": "track_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Track deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "deleted_track": { "$ref": "#/components/schemas/Track" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/track/{track_id}/cover": {
+      "post": {
+        "tags": ["Cover Images"],
+        "operationId": "createTrackCover",
+        "summary": "Generate a track cover image upload URL",
+        "parameters": [
+          { "name": "track_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload handle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "track": { "$ref": "#/components/schemas/Track" },
+                        "track_cover_upload": { "$ref": "#/components/schemas/UploadHandle" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/track/{track_id}/variant": {
+      "post": {
+        "tags": ["Variants"],
+        "operationId": "addTrackVariant",
+        "summary": "Add a track-specific variant",
+        "description": "Appends a new track file to an already-processed track and queues processing. Only 'transcode' and 'preview' are supported. Common body fields: variant_type_id, index. Transcode fields: codec, bitrate, is_stereo, is_strip_tags, is_strip_cover (lossy codecs only; codec defaults to aac at 128 kbps). Preview fields: preview_type, preview_seconds / preview_min_percent / preview_max_percent (when preview_type is seconds), preview_percent / preview_min_seconds / preview_max_seconds (when preview_type is percent), preview_start_percent — plus the same Transcode audio fields. The track is moved to 'processing' and returns to 'ready' when the file is generated.",
+        "parameters": [
+          { "name": "track_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["variant_type_id", "index"],
+                "properties": {
+                  "variant_type_id": { "type": "string", "enum": ["transcode", "preview"] },
+                  "index": { "type": "string", "minLength": 2, "maxLength": 64, "description": "Delivery name; unique across organization and track variants" },
+                  "codec": { "type": "string", "enum": ["aac", "mp3", "ogg", "opus"], "default": "aac" },
+                  "bitrate": { "type": "integer", "minimum": 12, "maximum": 320, "default": 128 },
+                  "is_stereo": { "type": "boolean", "default": true },
+                  "is_strip_tags": { "type": "boolean", "default": true },
+                  "is_strip_cover": { "type": "boolean", "default": true },
+                  "preview_type": { "type": "string", "enum": ["seconds", "percent"], "default": "seconds", "description": "preview only" },
+                  "preview_seconds": { "type": "number", "default": 60, "description": "preview + preview_type 'seconds'" },
+                  "preview_min_percent": { "type": "number", "default": 0, "description": "preview + preview_type 'seconds'" },
+                  "preview_max_percent": { "type": "number", "default": 50, "description": "preview + preview_type 'seconds'" },
+                  "preview_percent": { "type": "number", "default": 25, "description": "preview + preview_type 'percent'" },
+                  "preview_min_seconds": { "type": "number", "default": 0, "description": "preview + preview_type 'percent'" },
+                  "preview_max_seconds": { "type": "number", "default": 90, "description": "preview + preview_type 'percent'" },
+                  "preview_start_percent": { "type": "number", "minimum": 0, "maximum": 100, "default": 25, "description": "preview only: clip start as a percent of duration" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Variant created and processing queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "variant_id": { "type": "string", "format": "uuid" },
+                        "job_id": { "type": "string", "format": "uuid" },
+                        "variant": { "$ref": "#/components/schemas/Variant" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "A variant with the given index already exists for this track." },
+          "422": { "description": "The track has no source file to process yet." }
+        }
+      }
+    },
+    "/v1/upload_session": {
+      "post": {
+        "tags": ["Upload Sessions"],
+        "operationId": "createUploadSession",
+        "summary": "Create upload session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "collection_id": { "type": "string", "format": "uuid", "description": "Required unless the API key is scoped to a collection." },
+                  "creator_id": { "type": "string", "format": "uuid" },
+                  "organization_index": { "type": "string" },
+                  "metadata": { "type": "object", "additionalProperties": true },
+                  "expires_in": { "type": "integer", "description": "Session duration in seconds (default 3600, min 60, max 86400).", "minimum": 60, "maximum": 86400, "default": 3600 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload session created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload_session_id": { "type": "string", "format": "uuid" },
+                        "upload_session": { "$ref": "#/components/schemas/UploadSession" },
+                        "player_color": { "type": "string", "nullable": true },
+                        "player_color_light": { "type": "string", "nullable": true },
+                        "player_color_dark": { "type": "string", "nullable": true },
+                        "expires_at": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/upload_session/{upload_session_id}": {
+      "get": {
+        "tags": ["Upload Sessions"],
+        "operationId": "getUploadSession",
+        "summary": "Get upload session",
+        "description": "No authentication required — the session ID acts as the credential.",
+        "security": [],
+        "parameters": [
+          { "name": "upload_session_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload session details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload_session_id": { "type": "string", "format": "uuid" },
+                        "upload_session": { "$ref": "#/components/schemas/UploadSession" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/upload/{upload_session_id}/track": {
+      "post": {
+        "tags": ["Upload Sessions"],
+        "operationId": "createUploadSessionTrack",
+        "summary": "Create a track within an upload session",
+        "description": "Call once per file to obtain a per-track upload URL. No authentication required — the session ID acts as the credential.",
+        "security": [],
+        "parameters": [
+          { "name": "upload_session_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["file_name"],
+                "properties": {
+                  "file_name": { "type": "string" },
+                  "organization_index": { "type": "string" },
+                  "metadata": { "type": "object", "additionalProperties": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Track and upload handle returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "upload_session_id": { "type": "string", "format": "uuid" },
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "track": { "$ref": "#/components/schemas/Track" },
+                        "upload_session": { "$ref": "#/components/schemas/UploadSession" },
+                        "track_upload": { "$ref": "#/components/schemas/UploadHandle" },
+                        "track_cover_upload": { "$ref": "#/components/schemas/UploadHandle" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/play_session/{scope}": {
+      "post": {
+        "tags": ["Play Sessions"],
+        "operationId": "createPlaySession",
+        "summary": "Create play session",
+        "parameters": [
+          { "name": "scope", "in": "path", "required": true, "schema": { "type": "string", "enum": ["collection", "track"] }, "description": "\"collection\" or \"track\". \"playlist\" is reserved for a future release and currently returns 400." }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "variants": { "type": "array", "items": { "type": "string" } },
+                  "collection_id": { "type": "string", "format": "uuid", "description": "Required when scope is 'collection'." },
+                  "track_id": { "type": "string", "format": "uuid", "description": "Required when scope is 'track'." },
+                  "is_downloadable": { "type": "boolean", "description": "Requests downloadable tracks. Only honored when the API key also allows downloads; the stored value is api_key.is_downloadable AND this request." },
+                  "expires_in": { "type": "integer", "description": "Session duration in seconds (default 3600, min 60, max 86400).", "minimum": 60, "maximum": 86400, "default": 3600 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Play session created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "play_session_id": { "type": "string", "format": "uuid" },
+                        "play_session": { "$ref": "#/components/schemas/PlaySession" },
+                        "tracks": { "type": "array", "items": { "$ref": "#/components/schemas/Track" } },
+                        "first_track": { "type": "object", "additionalProperties": true, "description": "Full playback data for the first track, including signed variant URLs, so a player can render without a second call." },
+                        "expires_at": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/play_session/{play_session_id}": {
+      "get": {
+        "tags": ["Play Sessions"],
+        "operationId": "getPlaySession",
+        "summary": "Get play session",
+        "parameters": [
+          { "name": "play_session_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Play session details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "play_session_id": { "type": "string", "format": "uuid" },
+                        "play_session": { "$ref": "#/components/schemas/PlaySession" },
+                        "tracks": { "type": "array", "items": { "$ref": "#/components/schemas/Track" } }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/play/{play_session_id}/{play_track_id}": {
+      "get": {
+        "tags": ["Play Sessions"],
+        "operationId": "getPlayTrack",
+        "summary": "Get a track within a play session",
+        "description": "No authentication required — the session ID acts as the credential.",
+        "security": [],
+        "parameters": [
+          { "name": "play_session_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "play_track_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Track within the play session, including signed variant URLs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "play_session_id": { "type": "string", "format": "uuid" },
+                        "track_id": { "type": "string", "format": "uuid" },
+                        "play_session": { "$ref": "#/components/schemas/PlaySession" },
+                        "cover_image": { "type": "string", "format": "uri" },
+                        "track": { "$ref": "#/components/schemas/Track" },
+                        "levels": { "type": "object", "additionalProperties": true },
+                        "variants": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": { "type": "string", "format": "uri" },
+                              "url": { "type": "string", "format": "uri" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/play/{play_session_id}/{play_track_id}/{variant_index}/download": {
+      "get": {
+        "tags": ["Play Sessions"],
+        "operationId": "downloadPlayTrackVariant",
+        "summary": "Download a variant of a track within a play session",
+        "description": "Returns a short-lived signed download URL for a specific variant. Only available when the session's stored is_downloadable is true; otherwise returns 403. No authentication required — the session ID acts as the credential.",
+        "security": [],
+        "parameters": [
+          { "name": "play_session_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "play_track_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "variant_index", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed download URL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "download": {
+                          "type": "object",
+                          "properties": {
+                            "url": { "type": "string", "format": "uri" },
+                            "expires_at": { "type": "string", "format": "date-time" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": { "description": "The session is not downloadable." },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/variant": {
+      "get": {
+        "tags": ["Variants"],
+        "operationId": "listVariants",
+        "summary": "List variants",
+        "parameters": [
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Offset" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Variants list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "count": { "type": "integer" },
+                        "variants": { "type": "array", "items": { "$ref": "#/components/schemas/Variant" } }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/variant/{variant_id}": {
+      "get": {
+        "tags": ["Variants"],
+        "operationId": "getVariant",
+        "summary": "Get variant",
+        "parameters": [
+          { "name": "variant_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Variant details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/OkEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "variant_id": { "type": "string", "format": "uuid" },
+                        "variant": { "$ref": "#/components/schemas/Variant" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  }
+}
