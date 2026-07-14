@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.3.2
+
+- Moved `agents` to devDependencies. It is only used by the Cloudflare Worker
+  (`worker/`, excluded from the npm tarball); as a runtime dependency it pulled
+  a large, unnecessary tree into `npx @audiodn/mcp` and forced a zod peer
+  override. Stdio installs are now lean (`@modelcontextprotocol/sdk` + `zod`).
+- First version published to the Official MCP Registry as `net.audiodelivery/mcp`.
+
 ## 0.3.1
 
 - Redeploy of the hosted Cloudflare Worker endpoint; no code or tool changes.
