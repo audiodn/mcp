@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.1
+
+- Redeploy of the hosted Cloudflare Worker endpoint; no code or tool changes.
+
 ## 0.3.0
 
 - Added a hosted **Streamable HTTP** endpoint (Cloudflare Worker in `worker/`)
