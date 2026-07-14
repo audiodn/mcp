@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0
+
 - Added a hosted **Streamable HTTP** endpoint (Cloudflare Worker in `worker/`)
   serving the same tools at `/mcp`, plus a `/health` info route. Auth is
   bring-your-own-key via header (`Authorization: Bearer` or `X-ADN-API-Key`);
@@ -12,6 +14,8 @@
   Extracted a shared tool result/error formatter (`src/tools/run.ts`).
 - Added `server.json` and `mcpName` for later publication to the official MCP
   registry (npm stdio package + streamable-http remote).
+- Synced canonical snapshots from the live site (`llms-full.txt` now includes
+  the AudioDN MCP server section); `openapi.json` unchanged at v1.0.0.
 
 ## 0.2.0
 

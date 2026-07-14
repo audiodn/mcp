@@ -3,7 +3,7 @@
   "name": "net.audiodelivery/mcp",
   "title": "AudioDN",
   "description": "Configure AudioDN audio hosting from your AI agent: upload sessions, tracks, playback sessions, variants, plus offline, grounded API docs and guides.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/audiodn/mcp",
     "source": "github"
@@ -13,7 +13,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@audiodn/mcp",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
