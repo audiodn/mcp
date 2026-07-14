@@ -359,7 +359,35 @@ install AudioDN's own guidance and a validator. The kit is published independent
 The guidance and endpoint list derive from this site's canonical OpenAPI and llms-full.txt via a
 one-way sync, so the kit stays consistent with the API without the site depending on it.
 
-## 15. Contact
+## 15. AudioDN MCP server (Model Context Protocol)
+
+For assistants that speak the Model Context Protocol (Cursor, Claude Desktop, Claude Code, VS Code,
+Codex, and others), the AudioDN MCP server lets the assistant call the API and look up canonical
+endpoints directly. There are two ways to connect:
+
+- Hosted (remote): a public Streamable HTTP endpoint at https://mcp.audiodelivery.net/mcp. It stores no
+  secrets — knowledge/doc tools work with no key, and live API tools activate when the client sends an
+  AudioDN API key on each request as `Authorization: Bearer adn_...` or `X-ADN-API-Key: adn_...`. Delete
+  tools are never exposed on the hosted endpoint. (The root https://mcp.audiodelivery.net/ serves an info
+  page; /health returns JSON.)
+- Local (stdio): published independently on npm as @audiodn/mcp
+  (https://www.npmjs.com/package/@audiodn/mcp) and run via `npx @audiodn/mcp`.
+
+- Configure the local server with `ADN_API_KEY` (a server-side, full-access API key). Optional env:
+  `ADN_API_BASE_URL`, `ADN_MCP_ALLOW_DELETE=1`, `ADN_MCP_LIVE_DOCS=1`, `ADN_MCP_TIMEOUT_MS`.
+- Live API tools: creators, collections, tracks, upload sessions, per-track upload URLs, play sessions,
+  and variants. Reads are annotated read-only; create/update tools are annotated so the client can
+  prompt for approval.
+- Destructive delete tools (adn_delete_creator, adn_delete_collection) are hidden and refuse to run
+  unless the server is started with `ADN_MCP_ALLOW_DELETE=1`.
+- Offline, read-only knowledge tools grounded in bundled canonical snapshots (OpenAPI + llms-full):
+  adn_search_docs, adn_list_operations, adn_get_operation, adn_get_guide, adn_list_variant_types,
+  adn_about. Canonical docs are also exposed as MCP resources (audiodn://openapi.json,
+  audiodn://llms-full.txt, audiodn://guide/{topic}).
+
+The bundled snapshots derive from this site's canonical OpenAPI and llms-full.txt via a one-way sync.
+
+## 16. Contact
 
 - Sales: sales@audiodeliverynetwork.com
 - Support: support@audiodeliverynetwork.com
