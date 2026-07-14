@@ -8,6 +8,23 @@ behalf, plus offline, read-only **knowledge tools** grounded in the canonical
 AudioDN OpenAPI spec and documentation so agents look up the correct endpoints
 instead of guessing.
 
+## Install in Cursor
+
+One-click install (hosted endpoint, zero setup — knowledge/doc tools work
+immediately):
+
+[![Add AudioDN to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=audiodn&config=eyJ1cmwiOiJodHRwczovL21jcC5hdWRpb2RlbGl2ZXJ5Lm5ldC9tY3AiLCJoZWFkZXJzIjp7IkF1dGhvcml6YXRpb24iOiJCZWFyZXIgJHtlbnY6QUROX0FQSV9LRVl9In19)
+
+To enable the live API tools, set `ADN_API_KEY` (an `adn_...` key from the
+dashboard) in your environment before launching Cursor; the hosted endpoint
+picks it up from the `Authorization` header. Prefer a local stdio server? Use
+this button instead:
+
+[![Add AudioDN (npx) to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=audiodn&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBhdWRpb2RuL21jcCJdLCJlbnYiOnsiQUROX0FQSV9LRVkiOiJhZG5fWU9VUl9BUElfS0VZIn19)
+
+Both correspond to the [`mcp.json`](mcp.json) shipped with this plugin. See
+[Cursor's MCP docs](https://cursor.com/docs/context/mcp) for manual setup.
+
 ## Install
 
 ```bash

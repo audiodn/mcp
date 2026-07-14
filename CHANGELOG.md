@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Packaged as a Cursor plugin for the Cursor Marketplace: added
+  `.cursor-plugin/plugin.json`, a root `mcp.json` (hosted endpoint, bring-your-own
+  key via `ADN_API_KEY`), a square `logo.png`, and README "Install in Cursor"
+  one-click links. Plugin files are excluded from the npm tarball.
+
 ## 0.3.2
 
 - Moved `agents` to devDependencies. It is only used by the Cloudflare Worker

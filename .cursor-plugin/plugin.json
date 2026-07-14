@@ -1,0 +1,23 @@
+{
+  "$schema": "https://cursor.com/schemas/cursor-plugin/plugin.json",
+  "name": "audiodn",
+  "description": "Configure AudioDN audio hosting from your AI agent: uploads, playback, variants, plus grounded API docs and guides.",
+  "version": "0.3.2",
+  "author": {
+    "name": "AudioDN"
+  },
+  "homepage": "https://audiodeliverynetwork.com/for-ai-agents",
+  "repository": "https://github.com/audiodn/mcp",
+  "license": "MIT",
+  "keywords": [
+    "audiodn",
+    "audio",
+    "mcp",
+    "audio-hosting",
+    "uploads",
+    "playback",
+    "streaming"
+  ],
+  "logo": "logo.png",
+  "mcpServers": "mcp.json"
+}
