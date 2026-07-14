@@ -1,0 +1,33 @@
+name: Deploy Worker
+
+# Deploys the hosted Streamable HTTP endpoint (worker/) to Cloudflare Workers
+# on every push to main. Requires two repo secrets:
+#   CLOUDFLARE_API_TOKEN   - token with "Edit Cloudflare Workers" permission
+#   CLOUDFLARE_ACCOUNT_ID  - the target account id
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys at once; a newer push supersedes an in-flight one.
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
