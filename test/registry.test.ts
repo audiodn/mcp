@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AdnClient } from '../src/client.js';
-import { DocStore } from '../src/docs/store.js';
+import { loadDocStore } from '../src/docs/load-node.js';
 import { buildServer } from '../src/server.js';
 
 interface Harness {
@@ -14,7 +14,7 @@ async function connect(allowDelete: boolean): Promise<Harness> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer({
     client: new AdnClient({ apiKey: 'adn_test' }),
-    store: DocStore.load(),
+    store: loadDocStore(),
     version: '9.9.9',
     allowDelete,
   });

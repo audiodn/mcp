@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Added a hosted **Streamable HTTP** endpoint (Cloudflare Worker in `worker/`)
+  serving the same tools at `/mcp`, plus a `/health` info route. Auth is
+  bring-your-own-key via header (`Authorization: Bearer` or `X-ADN-API-Key`);
+  knowledge tools work with no key, live API tools activate when a key is sent,
+  and delete tools are never exposed. Deploy with `npm run deploy`.
+- Made the shared core Worker-safe: `DocStore` is now data-driven
+  (`DocStore.fromData`), with a Node-only fs loader (`src/docs/load-node.ts`).
+  Extracted a shared tool result/error formatter (`src/tools/run.ts`).
+- Added `server.json` and `mcpName` for later publication to the official MCP
+  registry (npm stdio package + streamable-http remote).
+
 ## 0.2.0
 
 - Split into its own repository (github.com/audiodn/mcp), published independently

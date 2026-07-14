@@ -49,6 +49,43 @@ export ADN_API_KEY="adn_..."
   hidden and refuse to run unless the server is started with
   `ADN_MCP_ALLOW_DELETE=1`. Set it once to opt in.
 
+## Hosted (remote) endpoint
+
+Besides the local `npx` stdio server above, AudioDN runs the same tool set as a
+**hosted Streamable HTTP endpoint** on Cloudflare Workers, so clients that
+support remote MCP servers can connect without installing anything.
+
+- **URL:** `https://mcp.audiodelivery.net/mcp` — the MCP endpoint. The root
+  `/` serves a human landing page in a browser (and JSON for tooling), and
+  `/health` returns machine-readable server info.
+- **Auth — bring your own key:** the endpoint is public and stores no secrets.
+  Knowledge/doc tools work with **no key**. To enable the live API tools, send
+  your AudioDN API key on every request as either header:
+
+```
+Authorization: Bearer adn_...
+# or
+X-ADN-API-Key: adn_...
+```
+
+- **Deletes** are never exposed on the hosted endpoint, regardless of key.
+
+Example client configuration (clients that support a remote/HTTP MCP URL):
+
+```json
+{
+  "mcpServers": {
+    "audiodn": {
+      "url": "https://mcp.audiodelivery.net/mcp",
+      "headers": { "Authorization": "Bearer adn_..." }
+    }
+  }
+}
+```
+
+The hosted Worker lives in `worker/` and is deployed with Wrangler
+(`npm run deploy`); it is not part of the published npm package.
+
 ## Use with Cursor
 
 Settings → Tools & Integrations → MCP (or edit `~/.cursor/mcp.json`):
@@ -171,6 +208,27 @@ npm test           # vitest
 npm run smoke      # build + spawn the real binary over stdio
 node dist/index.js
 ```
+
+## Deploy the hosted endpoint
+
+The Cloudflare Worker in `worker/` serves the same tools over Streamable HTTP.
+
+```bash
+npx wrangler login
+npm run dev:worker        # local: http://localhost:8787/mcp and /health
+npm run deploy            # publish -> https://mcp.audiodelivery.net (custom domain)
+curl https://mcp.audiodelivery.net/health
+```
+
+The custom domain `mcp.audiodelivery.net` is provisioned by Cloudflare from the
+`routes` entry in `wrangler.toml` (the `audiodelivery.net` zone must be on the
+same Cloudflare account).
+
+To list on the official MCP registry (registry name `net.audiodelivery/mcp`,
+which must match `mcpName` in `package.json`): verify the domain once with
+`mcp-publisher login dns --domain audiodelivery.net` (add the printed TXT
+record), confirm `remotes[0].url` in `server.json` points at the deployed URL,
+then `mcp-publisher publish`.
 
 ## Keeping docs fresh
 

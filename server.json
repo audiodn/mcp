@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "net.audiodelivery/mcp",
+  "title": "AudioDN",
+  "description": "Configure AudioDN audio hosting from your AI agent: upload sessions, tracks, playback sessions, variants, plus offline, grounded API docs and guides.",
+  "version": "0.2.0",
+  "repository": {
+    "url": "https://github.com/audiodn/mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@audiodn/mcp",
+      "version": "0.2.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ADN_API_KEY",
+          "description": "AudioDN server-side API key (adn_...). Required for live API tools; knowledge/doc tools work without it.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ADN_API_BASE_URL",
+          "description": "Override the AudioDN API base URL. Defaults to https://api.audiodelivery.net.",
+          "isRequired": false
+        },
+        {
+          "name": "ADN_MCP_ALLOW_DELETE",
+          "description": "Set to 1 to enable destructive delete tools. Off by default.",
+          "isRequired": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.audiodelivery.net/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bring your own AudioDN API key as a bearer token: 'Bearer adn_...'. Optional — knowledge/doc tools work with no key; live API tools activate when a key is sent.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

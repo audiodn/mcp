@@ -1,8 +1,3 @@
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { GUIDES_DIR, SNAPSHOTS_DIR } from '../paths.js';
-import { getVersion } from '../version.js';
-
 export const GUIDE_TOPICS = [
   'authentication',
   'upload',
@@ -42,6 +37,20 @@ interface CorpusDoc {
   title: string;
   source: string;
   text: string;
+}
+
+/**
+ * Everything DocStore needs, decoupled from how it was loaded. The Node entry
+ * reads it from disk (see load-node.ts); the Cloudflare Worker passes statically
+ * imported modules (see worker/assets.ts). This keeps DocStore free of any
+ * `node:*` imports so it bundles cleanly for Workers.
+ */
+export interface DocStoreData {
+  openapi: any;
+  llmsFull: string;
+  sources: any;
+  guides: Record<string, string>;
+  serverVersion: string;
 }
 
 const VARIANT_TYPES: VariantTypeInfo[] = [
@@ -96,19 +105,23 @@ export class DocStore {
   private openapi: any;
   private llmsFull: string;
   private sources: any;
+  private serverVersion: string;
   private guides = new Map<string, string>();
   private corpus: CorpusDoc[] = [];
 
-  private constructor() {
-    this.openapi = readJson(join(SNAPSHOTS_DIR, 'openapi.json'));
-    this.llmsFull = readText(join(SNAPSHOTS_DIR, 'llms-full.txt'));
-    this.sources = readJson(join(SNAPSHOTS_DIR, 'sources.json'));
-    this.loadGuides();
+  private constructor(data: DocStoreData) {
+    this.openapi = data.openapi;
+    this.llmsFull = data.llmsFull;
+    this.sources = data.sources;
+    this.serverVersion = data.serverVersion;
+    for (const [topic, text] of Object.entries(data.guides)) {
+      this.guides.set(topic, text);
+    }
     this.buildCorpus();
   }
 
-  static load(): DocStore {
-    return new DocStore();
+  static fromData(data: DocStoreData): DocStore {
+    return new DocStore(data);
   }
 
   /**
@@ -143,7 +156,7 @@ export class DocStore {
 
   about() {
     return {
-      serverVersion: getVersion(),
+      serverVersion: this.serverVersion,
       openapiVersion: this.openapi?.info?.version ?? 'unknown',
       docsSource: this.sources?.live ? 'live' : 'bundled snapshot',
       snapshot: this.sources,
@@ -225,15 +238,6 @@ export class DocStore {
     return this.llmsFull;
   }
 
-  private loadGuides() {
-    if (!existsSync(GUIDES_DIR)) return;
-    for (const file of readdirSync(GUIDES_DIR)) {
-      if (!file.endsWith('.md')) continue;
-      const topic = file.replace(/\.md$/, '');
-      this.guides.set(topic, readText(join(GUIDES_DIR, file)));
-    }
-  }
-
   private buildCorpus() {
     const corpus: CorpusDoc[] = [];
     for (const section of splitSections(this.llmsFull)) {
@@ -255,14 +259,6 @@ export class DocStore {
     }
     this.corpus = corpus;
   }
-}
-
-function readText(path: string): string {
-  return readFileSync(path, 'utf8');
-}
-
-function readJson(path: string): any {
-  return JSON.parse(readFileSync(path, 'utf8'));
 }
 
 function tokenize(query: string): string[] {

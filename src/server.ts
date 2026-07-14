@@ -10,6 +10,7 @@ import { DocStore, GUIDE_TOPICS } from './docs/store.js';
 import { zodToJsonSchema } from './schema.js';
 import { createApiTools } from './tools/api-tools.js';
 import { createKnowledgeTools } from './tools/knowledge-tools.js';
+import { runToolHandler, toolErrorResult } from './tools/run.js';
 import type { ToolDef } from './tools/types.js';
 
 export interface BuildServerOptions {
@@ -50,33 +51,20 @@ export function buildServer(opts: BuildServerOptions): Server {
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const tool = allTools.find((t) => t.name === req.params.name);
     if (!tool) {
-      return errorResult(`Unknown tool: ${req.params.name}`);
+      return toolErrorResult(`Unknown tool: ${req.params.name}`);
     }
     if (tool.gated === 'delete' && !allowDelete) {
-      return errorResult(
+      return toolErrorResult(
         `${tool.name} is disabled. Restart the AudioDN MCP server with ADN_MCP_ALLOW_DELETE=1 to enable destructive delete tools.`,
       );
     }
     const parsed = tool.inputSchema.safeParse(req.params.arguments ?? {});
     if (!parsed.success) {
-      return errorResult(
+      return toolErrorResult(
         `Invalid arguments for ${tool.name}: ${parsed.error.message}`,
       );
     }
-    try {
-      const result = await tool.handler(parsed.data as any);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    } catch (err: any) {
-      const suffix = err?.apiRequestId
-        ? ` (api_request_id=${err.apiRequestId})`
-        : '';
-      const status = typeof err?.status === 'number' ? ` [status ${err.status}]` : '';
-      return errorResult(
-        `${tool.name} failed${status}: ${err?.message ?? String(err)}${suffix}`,
-      );
-    }
+    return runToolHandler(tool, parsed.data);
   });
 
   registerResources(server, store);
@@ -132,8 +120,4 @@ function registerResources(server: Server, store: DocStore) {
     }
     throw new Error(`Unknown resource: ${uri}`);
   });
-}
-
-function errorResult(text: string) {
-  return { isError: true, content: [{ type: 'text' as const, text }] };
 }

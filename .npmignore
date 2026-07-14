@@ -2,9 +2,13 @@
 src/
 test/
 scripts/
+worker/
 .github/
 tsconfig.json
 vitest.config.ts
+wrangler.toml
+.npmrc
+server.json
 *.tsbuildinfo
 coverage/
 CHANGELOG.md

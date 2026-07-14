@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DocStore, GUIDE_TOPICS } from '../src/docs/store.js';
+import { GUIDE_TOPICS } from '../src/docs/store.js';
+import { loadDocStore } from '../src/docs/load-node.js';
 import { createKnowledgeTools } from '../src/tools/knowledge-tools.js';
 
-const store = DocStore.load();
+const store = loadDocStore();
 const tools = createKnowledgeTools(store);
 const byName = new Map(tools.map((t) => [t.name, t]));
 

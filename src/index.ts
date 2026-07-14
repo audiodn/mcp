@@ -20,7 +20,7 @@
  */
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { AdnClient } from './client.js';
-import { DocStore } from './docs/store.js';
+import { loadDocStore } from './docs/load-node.js';
 import { buildServer } from './server.js';
 import { getVersion } from './version.js';
 
@@ -39,7 +39,7 @@ async function main() {
     timeoutMs: parseTimeout(process.env.ADN_MCP_TIMEOUT_MS),
   });
 
-  const store = DocStore.load();
+  const store = loadDocStore();
   await store.maybeRefreshLive();
 
   const server = buildServer({

@@ -1,0 +1,23 @@
+name = "audiodn-mcp"
+main = "worker/index.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Public endpoint: https://mcp.audiodelivery.net/mcp
+# custom_domain = true makes Cloudflare provision the DNS record + TLS cert.
+# Requires the audiodelivery.net zone to be on the same Cloudflare account.
+routes = [
+  { pattern = "mcp.audiodelivery.net", custom_domain = true }
+]
+
+# Import bundled docs (guides + llms-full) as strings. JSON imports work natively.
+[[rules]]
+type = "Text"
+globs = ["**/*.md", "**/*.txt"]
+fallthrough = true
+
+[vars]
+ADN_API_BASE_URL = "https://api.audiodelivery.net"
+
+[observability]
+enabled = true
