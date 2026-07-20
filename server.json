@@ -2,12 +2,19 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "net.audiodelivery/mcp",
   "title": "Audio Delivery Network",
-  "description": "AI-manageable audio CDN infrastructure: upload, transcode, normalize, analyze, stream, and deliver audio with variants, waveforms, and developer docs.",
+  "description": "AI-manageable audio CDN: upload, transcode, normalize, stream & deliver audio, plus grounded docs.",
+  "websiteUrl": "https://audiodeliverynetwork.com/for-ai-agents/",
   "version": "0.3.3",
   "repository": {
     "url": "https://github.com/audiodn/mcp",
     "source": "github"
   },
+  "icons": [
+    {
+      "src": "https://audiodeliverynetwork.com/logo.png",
+      "mimeType": "image/png"
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
@@ -51,5 +58,31 @@
         }
       ]
     }
-  ]
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.github": {
+        "serverDisplayName": "AudioDN",
+        "tags": [
+          "audio",
+          "audio-hosting",
+          "audio-cdn",
+          "transcoding",
+          "sound",
+          "streaming",
+          "waveform",
+          "podcast",
+          "media",
+          "upload",
+          "music"
+        ],
+        "categories": [
+          "Media",
+          "Audio",
+          "Infrastructure",
+          "Developer Tools"
+        ]
+      }
+    }
+  }
 }
