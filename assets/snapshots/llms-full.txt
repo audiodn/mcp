@@ -126,9 +126,9 @@ All endpoints are prefixed with `/v1/`. Complete schemas at https://audiodeliver
 - `POST /v1/track/{track_id}/cover` — generate track cover upload URL
 
 ### Upload sessions
-- `POST /v1/upload_session` — create upload session (requires Bearer auth; `collection_id` required unless the API key is scoped to a collection). Returns `upload_session_id` only — not an upload URL.
+- `POST /v1/upload_session` — create upload session (requires Bearer auth; `collection_id` required unless the API key is scoped to a collection). Returns `upload_session_id`. Optionally include a nested `track` object to also create one track and receive `track_id` / `track_upload.upload_url` in the same response.
 - `GET /v1/upload_session/{upload_session_id}` — get upload session (no Bearer required; the session ID authorizes the request)
-- `POST /v1/upload/{upload_session_id}/track` — create a track within an upload session (one request per file; no Bearer required — the session ID authorizes it). Returns `track_id` and a per-track signed URL in `track_upload.upload_url`.
+- `POST /v1/upload/{upload_session_id}/track` — create a track within an upload session (one request per file; no Bearer required — the session ID authorizes it). Returns `track_id` and a per-track signed URL in `track_upload.upload_url`. Skip this when you already created the track via the nested `track` on session create.
 
 ### Play sessions
 - `POST /v1/play_session/{scope}` — create play session; scope is `collection` or `track` (`playlist` is reserved but not yet supported — the API currently returns 400)
@@ -145,8 +145,8 @@ All endpoints are prefixed with `/v1/`. Complete schemas at https://audiodeliver
 
 When a file is uploaded to AudioDN, it moves through these stages:
 
-1. **Create upload session** — your app requests an upload session via the API (or the uploader component does it automatically with a Client-Side API key). The API returns an `upload_session_id`. A session can hold many tracks and does not itself return an upload URL.
-2. **Create a track in the session** — for each file, make a separate `POST /v1/upload/{upload_session_id}/track` request. The response includes `track_id` and a per-track signed URL in `track_upload.upload_url`. The session ID authorizes this request, so no API key is required.
+1. **Create upload session** — your app requests an upload session via the API (or the uploader component does it automatically with a Client-Side API key). The API returns an `upload_session_id`. A session can hold many tracks. Optionally include a nested `track` object on this request to also receive `track_upload.upload_url` (you can still add more tracks later); otherwise create tracks in step 2.
+2. **Create a track in the session** — for each additional file (or for every file if you skipped the nested `track` on session create), make a separate `POST /v1/upload/{upload_session_id}/track` request. The response includes `track_id` and a per-track signed URL in `track_upload.upload_url`. The session ID authorizes this request, so no API key is required.
 3. **Upload file** — the audio file is uploaded directly to storage with a `PUT` to `track_upload.upload_url`. Once the upload completes, processing begins automatically.
 4. **Initialization** — ADN probes the file to extract duration, codec info, and stream metadata. A default 320-sample waveform is generated for the player.
 5. **Variant processing** — each configured variant (transcodes, previews, analysis, waveform images/videos) is processed in parallel. Track status is `processing`.
@@ -255,8 +255,8 @@ Component reference: https://audiodeliverynetwork.com/docs/components/player, ht
 
 1. Sign up at https://account.audiodeliverynetwork.com and mint a server-side API key.
 2. (Optional) Create a collection: `POST /v1/collection` with `{ "title": "..." }`.
-3. Mint an upload session: `POST /v1/upload_session` with `{ "collection_id": "..." }`. Response includes `upload_session_id`.
-4. Create a track within the session: `POST /v1/upload/{upload_session_id}/track` with `{ "file_name": "..." }` (no Bearer needed; the session ID authorizes it). Response includes `track_id` and `track_upload.upload_url`. Upload the audio bytes (PUT) to that signed URL. Repeat this step once per file.
+3. Mint an upload session: `POST /v1/upload_session` with `{ "collection_id": "..." }`. Response includes `upload_session_id`. Optionally include a nested `track` object to also receive `track_id` and `track_upload.upload_url` on that response (you can still add more tracks later).
+4. Create a track within the session (skip if you already used the nested `track` on step 3, or use this for additional files): `POST /v1/upload/{upload_session_id}/track` with `{ "file_name": "..." }` (no Bearer needed; the session ID authorizes it). Response includes `track_id` and `track_upload.upload_url`. Upload the audio bytes (PUT) to that signed URL. Repeat this step once per additional file.
 5. Wait for the track to finish processing: poll `GET /v1/track/{track_id}` until `track.track_status_id` is `ready`, or use the track-processing webhook.
 6. Mint a play session: `POST /v1/play_session/track` with `{ "track_id": "...", "variants": ["hq", "lq"] }`. Response includes signed playback URLs in `first_track.variants[].url`.
 
@@ -314,20 +314,17 @@ Every page below is also available as clean Markdown by appending `.md` to its U
 - https://audiodeliverynetwork.com/docs/components/player — Player web component
 - https://audiodeliverynetwork.com/docs/components/uploader — Uploader web component
 - https://audiodeliverynetwork.com/docs/components/waveform — Waveform web component
-- https://audiodeliverynetwork.com/docs/recipes — Recipes + runnable examples index
-- https://audiodeliverynetwork.com/docs/recipes/private-podcast — Entitlement-gated private podcast
-- https://audiodeliverynetwork.com/docs/recipes/preview-and-waveform — Preview clips + waveform workflow
-- https://audiodeliverynetwork.com/docs/recipes/vue-secure-upload — Secure upload in Vue / Nuxt
 - https://audiodeliverynetwork.com/docs/roadmap — Feature roadmap
 
-## 13. Recipes and runnable examples
+## 13. Examples and runnable projects
 
-Task-oriented recipes live under https://audiodeliverynetwork.com/docs/recipes. Each recipe
-covers when to use it, architecture, the server/client boundary, environment variables,
-complete code, correct auth (Bearer only server-side; per-track create and play GET use NO
-Bearer), the full upload lifecycle (create session -> per-track create -> PUT bytes -> wait
-for `ready` -> playback/delivery), expected errors, testing, deployment, and links to the
-exact OpenAPI operations (now carrying `operationId`s in https://audiodeliverynetwork.com/openapi.json).
+Practical walkthroughs live under https://audiodeliverynetwork.com/examples. Each article covers
+a real workflow with HTTP requests, dependency snippets, and a live demo where it helps.
+
+- https://audiodeliverynetwork.com/examples — Examples index
+- https://audiodeliverynetwork.com/examples/prepare-audio-for-playback — Upload, process, and play
+- https://audiodeliverynetwork.com/examples/optimize-for-voice — Voice-oriented variants
+- https://audiodeliverynetwork.com/examples/preview-clip-player — Short public previews
 
 Two runnable projects ship in the AudioDN repository, each with a README.md and an AGENTS.md:
 
@@ -338,7 +335,7 @@ Two runnable projects ship in the AudioDN repository, each with a README.md and 
   the edge with an HMAC URL Signing key kept in Worker secrets, returning a ready-to-play URL.
 - examples/shared (@audiodn/recipe-kit) — dependency-free `fetch` + Web Crypto helpers
   (`createUploadSession`, `createTrackInSession`, `putBytes`, `waitForReady`, `createPlaySession`,
-  `getPlayTrack`, `signDeliveryUrl`) reused by both examples and mirrored in the recipes.
+  `getPlayTrack`, `signDeliveryUrl`) reused by both examples.
 
 ## 14. AudioDN Agent Kit (coding-agent setup)
 

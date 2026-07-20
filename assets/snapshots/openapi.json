@@ -783,7 +783,7 @@
                 "type": "object",
                 "required": ["collection_id", "file_name"],
                 "properties": {
-                  "collection_id": { "type": "string", "format": "uuid" },
+                  "collection_id": { "type": "string", "format": "uuid", "description": "Required unless the API key is scoped to a collection." },
                   "creator_id": { "type": "string", "format": "uuid" },
                   "file_name": { "type": "string" },
                   "organization_index": { "type": "string" },
@@ -1030,18 +1030,30 @@
         "tags": ["Upload Sessions"],
         "operationId": "createUploadSession",
         "summary": "Create upload session",
+        "description": "Creates an upload session for batch uploading tracks. By default returns an upload_session_id only — create tracks via POST /v1/upload/{upload_session_id}/track. Optionally include a nested `track` object to also create that track and receive track_id, track_upload, and track_cover_upload on the session response (you can still add more tracks later).",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": ["collection_id"],
                 "properties": {
                   "collection_id": { "type": "string", "format": "uuid", "description": "Required unless the API key is scoped to a collection." },
                   "creator_id": { "type": "string", "format": "uuid" },
                   "organization_index": { "type": "string" },
                   "metadata": { "type": "object", "additionalProperties": true },
-                  "expires_in": { "type": "integer", "description": "Session duration in seconds (default 3600, min 60, max 86400).", "minimum": 60, "maximum": 86400, "default": 3600 }
+                  "expires_in": { "type": "integer", "description": "Session duration in seconds (default 3600, min 60, max 86400).", "minimum": 60, "maximum": 86400, "default": 3600 },
+                  "track": {
+                    "type": "object",
+                    "description": "When present, also create that track and append track upload fields to the response.",
+                    "required": ["file_name"],
+                    "properties": {
+                      "file_name": { "type": "string", "description": "Original filename of the track. Required when track is present." },
+                      "organization_index": { "type": "string" },
+                      "metadata": { "type": "object", "additionalProperties": true }
+                    }
+                  }
                 }
               }
             }
@@ -1049,7 +1061,7 @@
         },
         "responses": {
           "200": {
-            "description": "Upload session created.",
+            "description": "Upload session created. When `track` was supplied in the request, also includes track_id, track, track_upload, and track_cover_upload.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1063,7 +1075,11 @@
                         "player_color": { "type": "string", "nullable": true },
                         "player_color_light": { "type": "string", "nullable": true },
                         "player_color_dark": { "type": "string", "nullable": true },
-                        "expires_at": { "type": "string", "format": "date-time" }
+                        "expires_at": { "type": "string", "format": "date-time" },
+                        "track_id": { "type": "string", "format": "uuid", "description": "Present only when the request included a nested `track` object." },
+                        "track": { "$ref": "#/components/schemas/Track", "description": "Present only when the request included a nested `track` object." },
+                        "track_upload": { "$ref": "#/components/schemas/UploadHandle", "description": "Present only when the request included a nested `track` object." },
+                        "track_cover_upload": { "$ref": "#/components/schemas/UploadHandle", "description": "Present only when the request included a nested `track` object." }
                       }
                     }
                   ]
@@ -1181,10 +1197,11 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": ["variants"],
                 "properties": {
-                  "variants": { "type": "array", "items": { "type": "string" } },
-                  "collection_id": { "type": "string", "format": "uuid", "description": "Required when scope is 'collection'." },
-                  "track_id": { "type": "string", "format": "uuid", "description": "Required when scope is 'track'." },
+                  "variants": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "Non-empty list of variant indexes for the play session." },
+                  "collection_id": { "type": "string", "format": "uuid", "description": "Required when scope is 'collection', unless the API key is scoped to a collection." },
+                  "track_id": { "type": "string", "format": "uuid", "description": "Required when scope is 'track', unless the API key is scoped to a track." },
                   "is_downloadable": { "type": "boolean", "description": "Requests downloadable tracks. Only honored when the API key also allows downloads; the stored value is api_key.is_downloadable AND this request." },
                   "expires_in": { "type": "integer", "description": "Session duration in seconds (default 3600, min 60, max 86400).", "minimum": 60, "maximum": 86400, "default": 3600 }
                 }
