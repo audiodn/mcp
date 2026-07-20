@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "net.audiodelivery/mcp",
   "title": "AudioDN",
-  "description": "Configure AudioDN audio hosting from your AI agent: uploads, playback, variants, plus grounded docs.",
-  "version": "0.3.2",
+  "description": "AI-manageable audio infrastructure: upload, transcode, normalize, analyze, stream, and deliver audio with variants, waveforms, and developer docs.",
+  "version": "0.3.3",
   "repository": {
     "url": "https://github.com/audiodn/mcp",
     "source": "github"
@@ -13,7 +13,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@audiodn/mcp",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
