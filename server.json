@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "net.audiodelivery/mcp",
-  "title": "AudioDN",
-  "description": "AI-manageable audio infrastructure: upload, transcode, normalize, analyze, stream, and deliver audio with variants, waveforms, and developer docs.",
+  "title": "Audio Delivery Network",
+  "description": "AI-manageable audio CDN infrastructure: upload, transcode, normalize, analyze, stream, and deliver audio with variants, waveforms, and developer docs.",
   "version": "0.3.3",
   "repository": {
     "url": "https://github.com/audiodn/mcp",
