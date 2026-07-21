@@ -4,6 +4,10 @@ After the bytes are uploaded, AudioDN processes the track: probing, waveform
 generation, variant transcodes/previews, optional fallback processing, and cover
 extraction. A track is not playable the instant it uploads.
 
+Every variant file lands under the track's durable delivery prefix —
+`track.base_path` / `track.base_url` from the track-creation response — plus a
+variant suffix and extension (e.g. `{base_url}_preview.mp3`).
+
 Determine readiness in one of two ways:
 
 - **Poll**: `GET /v1/track/{track_id}` (server, Bearer) until
