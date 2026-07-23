@@ -21,17 +21,20 @@ export interface ToolDef {
 
 export const READ_ONLY: McpToolAnnotations = {
   readOnlyHint: true,
+  destructiveHint: false,
   idempotentHint: true,
   openWorldHint: true,
 };
 
 export const WRITE: McpToolAnnotations = {
   readOnlyHint: false,
+  destructiveHint: false,
   openWorldHint: true,
 };
 
 export const WRITE_IDEMPOTENT: McpToolAnnotations = {
   readOnlyHint: false,
+  destructiveHint: false,
   idempotentHint: true,
   openWorldHint: true,
 };
@@ -44,6 +47,7 @@ export const DESTRUCTIVE: McpToolAnnotations = {
 
 export const LOCAL_READ_ONLY: McpToolAnnotations = {
   readOnlyHint: true,
+  destructiveHint: false,
   idempotentHint: true,
   openWorldHint: false,
 };
