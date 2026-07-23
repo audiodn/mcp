@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.3.4
+
+- Explicitly set `destructiveHint: false` on non-destructive MCP tool annotation
+  presets (`READ_ONLY`, `WRITE`, `WRITE_IDEMPOTENT`, `LOCAL_READ_ONLY`) so OpenAI
+  and other hosts that require a declared destructive flag accept write tools.
+- Clarified upload/play guides around per-track upload URL creation (session
+  create does not return the final upload URL; each track needs its own
+  track-creation request).
+- Bumped Cursor plugin manifest version to match the package.
+
+## 0.3.3
 
 - Packaged as a Cursor plugin for the Cursor Marketplace: added
   `.cursor-plugin/plugin.json`, a root `mcp.json` (hosted endpoint, bring-your-own

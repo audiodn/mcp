@@ -1,6 +1,6 @@
 {
   "name": "@audiodn/mcp",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Model Context Protocol server for AudioDN. Exposes the ADN REST API as MCP tools plus offline, grounded documentation tools so AI agents (Cursor, Claude Desktop, Claude Code, etc.) can configure audio hosting on a user's behalf.",
   "mcpName": "net.audiodelivery/mcp",
   "type": "module",

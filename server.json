@@ -4,7 +4,7 @@
   "title": "Audio Delivery Network",
   "description": "AI-manageable audio CDN: upload, transcode, normalize, stream & deliver audio, plus grounded docs.",
   "websiteUrl": "https://audiodeliverynetwork.com/for-ai-agents/",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "repository": {
     "url": "https://github.com/audiodn/mcp",
     "source": "github"
@@ -20,7 +20,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@audiodn/mcp",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
