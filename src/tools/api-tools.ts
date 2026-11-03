@@ -8,6 +8,8 @@ import {
   type ToolDef,
 } from './types.js';
 
+const limitSchema = z.number().int().min(1).max(100).optional();
+
 /** Live AudioDN REST API tools (reads, mutations, and gated deletes). */
 export function createApiTools(client: AdnClient): ToolDef[] {
   return [
@@ -17,7 +19,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
       description:
         'List creators on the authenticated AudioDN organization. A creator is a sub-account (artist, podcaster, contributor) used to classify collections and tracks.',
       inputSchema: z.object({
-        limit: z.number().int().min(1).max(200).optional(),
+        limit: limitSchema,
         offset: z.number().int().min(0).optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List creators' },
@@ -71,7 +73,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
       description:
         'List collections on the authenticated AudioDN organization. Use this to discover existing collections before creating a new one.',
       inputSchema: z.object({
-        limit: z.number().int().min(1).max(200).optional(),
+        limit: limitSchema,
         offset: z.number().int().min(0).optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List collections' },
@@ -139,7 +141,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
       description: 'List tracks in a collection.',
       inputSchema: z.object({
         collection_id: z.string().uuid(),
-        limit: z.number().int().min(1).max(200).optional(),
+        limit: limitSchema,
         offset: z.number().int().min(0).optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List tracks' },
@@ -152,17 +154,50 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_get_track',
       description:
-        'Get details about a specific track by ID. Use this to poll processing readiness: a track is playable only when track.track_status_id === "ready". Other terminal statuses (incomplete, error, init_error) indicate a problem; initialized/processing/fallback are transitional. Do not build playback until a track is ready.',
+        'Get details about a specific track by ID. Use this to poll processing readiness: a track is playable only when track.track_status_id === "ready". Other terminal statuses (incomplete, error, init_error) indicate a problem; initialized/processing/fallback/fallback_processing are transitional. Do not build playback until a track is ready. Prefer track_status_id over any legacy status alias.',
       inputSchema: z.object({ track_id: z.string().uuid() }),
       annotations: { ...READ_ONLY, title: 'Get track' },
       handler: (args: any) => client.getTrack(args.track_id),
+    },
+    {
+      name: 'adn_update_track',
+      description:
+        'Update track metadata and player fields (title, subtitle, color, organization_index, metadata, cover/theme override flags).',
+      inputSchema: z.object({
+        track_id: z.string().uuid(),
+        organization_index: z.string().optional(),
+        metadata: z.record(z.unknown()).optional(),
+        player_title: z.string().optional(),
+        player_subtitle: z.string().optional(),
+        player_color: z
+          .string()
+          .regex(/^#[0-9A-Fa-f]{6}$/)
+          .optional(),
+        is_cover_overridable: z.boolean().optional(),
+        is_theme_overridable: z.boolean().optional(),
+        creator_id: z.string().uuid().optional(),
+      }),
+      annotations: { ...WRITE_IDEMPOTENT, title: 'Update track' },
+      handler: (args: any) => {
+        const { track_id, ...body } = args;
+        return client.updateTrack(track_id, body);
+      },
+    },
+    {
+      name: 'adn_delete_track',
+      description:
+        'Soft-delete a single track (and its files/variants). Destructive; confirm with the user before calling. Requires ADN_MCP_ALLOW_DELETE=1.',
+      inputSchema: z.object({ track_id: z.string().uuid() }),
+      annotations: { ...DESTRUCTIVE, title: 'Delete track' },
+      gated: 'delete',
+      handler: (args: any) => client.deleteTrack(args.track_id),
     },
 
     // --- Upload sessions ---
     {
       name: 'adn_create_upload_session',
       description:
-        'Create an upload session for a collection. Returns an upload_session_id used to register tracks. This does NOT return an upload URL by itself — call adn_create_track_in_upload_session next.',
+        'Create an upload session for a collection. Returns an upload_session_id used to register tracks. This does NOT return an upload URL by itself — call adn_create_track_in_upload_session next (one call per file).',
       inputSchema: z.object({
         collection_id: z.string().uuid(),
         creator_id: z.string().uuid().optional(),
@@ -201,12 +236,14 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_create_play_session',
       description:
-        'Mint a play session that returns signed, time-gated playback URLs. Scope is "collection" or "track", and exactly one of collection_id / track_id must be provided. (Playlist scope is reserved for a future release and is not supported yet.)',
+        'Mint a play session. Scope is "collection" or "track", and exactly one of collection_id / track_id must be provided. variants is required: a non-empty list of delivery indexes from adn_list_variants (e.g. hq, lq). Returns play_session_id, tracks, and first_track with signed variant file URLs — pass the play_session_id to the ADN Player; use the signed URLs only with a custom player. Playlist scope is not supported.',
       inputSchema: z.object({
         scope: z.enum(['collection', 'track']),
         collection_id: z.string().uuid().optional(),
         track_id: z.string().uuid().optional(),
-        variants: z.array(z.string()).optional(),
+        variants: z.array(z.string().min(1)).min(1),
+        is_downloadable: z.boolean().optional(),
+        expires_in: z.number().int().min(60).max(86400).optional(),
       }),
       annotations: { ...WRITE, title: 'Create play session' },
       handler: (args: any) => {
@@ -216,23 +253,66 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     },
     {
       name: 'adn_get_play_session',
-      description: 'Get details about an existing play session.',
+      description:
+        'Get details about an existing play session. Authorized by the play_session_id itself (no Bearer required).',
       inputSchema: z.object({ play_session_id: z.string().uuid() }),
       annotations: { ...READ_ONLY, title: 'Get play session' },
       handler: (args: any) => client.getPlaySession(args.play_session_id),
+    },
+    {
+      name: 'adn_get_play_track',
+      description:
+        'Fetch signed playback data for a track inside an existing play session (for tracks after the first, or to refresh). Authorized by the play_session_id; no Bearer required.',
+      inputSchema: z.object({
+        play_session_id: z.string().uuid(),
+        play_track_id: z.string().uuid(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get play track' },
+      handler: (args: any) =>
+        client.getPlayTrack(args.play_session_id, args.play_track_id),
     },
 
     // --- Variants ---
     {
       name: 'adn_list_variants',
       description:
-        'List variant configurations on the authenticated organization. These are org-configured delivery "index" values (e.g. hq, lq, preview, waveform) used in play sessions and signed URLs — distinct from the underlying variant type. See adn_list_variant_types for the type catalog.',
+        'List variant configurations on the authenticated organization. Returns rows with index, variant_type_id, and props. Use the index values in adn_create_play_session. See adn_list_variant_types for the type catalog.',
       inputSchema: z.object({
-        limit: z.number().int().min(1).max(200).optional(),
+        limit: limitSchema,
         offset: z.number().int().min(0).optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List variants' },
       handler: (args: any) => client.listVariants(args),
+    },
+    {
+      name: 'adn_create_track_variant',
+      description:
+        'Append a track-specific transcode or preview variant to an already-processed track and queue processing. Only variant_type_id "transcode" or "preview". Call adn_list_variants first so the new index does not collide. The track returns to processing until the new file is ready.',
+      inputSchema: z.object({
+        track_id: z.string().uuid(),
+        variant_type_id: z.enum(['transcode', 'preview']),
+        index: z.string().min(2).max(64),
+        is_required: z.boolean().optional(),
+        notes: z.string().optional(),
+        codec: z.enum(['aac', 'mp3', 'ogg', 'opus']).optional(),
+        bitrate: z.number().int().min(12).max(320).optional(),
+        is_stereo: z.boolean().optional(),
+        is_strip_tags: z.boolean().optional(),
+        is_strip_cover: z.boolean().optional(),
+        preview_type: z.enum(['seconds', 'percent']).optional(),
+        preview_seconds: z.number().optional(),
+        preview_min_percent: z.number().optional(),
+        preview_max_percent: z.number().optional(),
+        preview_percent: z.number().optional(),
+        preview_min_seconds: z.number().optional(),
+        preview_max_seconds: z.number().optional(),
+        preview_start_percent: z.number().min(0).max(100).optional(),
+      }),
+      annotations: { ...WRITE, title: 'Create track variant' },
+      handler: (args: any) => {
+        const { track_id, ...body } = args;
+        return client.createTrackVariant(track_id, body);
+      },
     },
   ];
 }

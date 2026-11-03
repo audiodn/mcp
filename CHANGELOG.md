@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.5
+
+- Refreshed bundled OpenAPI snapshot: `track.track_status_id` (eight real
+  statuses), variant rows as `index` / `variant_type_id` / `props`, list
+  `limit` max 100, and `GET /v1/stream/{track_id}/{api_key}`.
+- `adn_create_play_session` now requires a non-empty `variants` list; README
+  example lists variants first.
+- Added `adn_update_track`, gated `adn_delete_track`, `adn_create_track_variant`,
+  and `adn_get_play_track`.
+- Dropped "normalize" wording from `server.json`; expanded authentication guide
+  for client-side keys, share keys, and URL Signing.
+
 ## 0.3.4
 
 - Explicitly set `destructiveHint: false` on non-destructive MCP tool annotation

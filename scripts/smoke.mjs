@@ -47,7 +47,7 @@ assert(about.openapiVersion === '1.0.0', `unexpected openapi version: ${about.op
 const ops = JSON.parse(
   (await client.callTool({ name: 'adn_list_operations', arguments: {} })).content[0].text,
 );
-assert(ops.operations.length === 30, `expected 30 operations, got ${ops.operations.length}`);
+assert(ops.operations.length === 31, `expected 31 operations, got ${ops.operations.length}`);
 
 await client.close();
 console.log('SMOKE OK');

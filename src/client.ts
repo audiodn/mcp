@@ -192,8 +192,23 @@ export class AdnClient {
     return this.request('POST', `/v1/track`, body);
   }
 
+  updateTrack(trackId: string, body: Record<string, unknown>) {
+    return this.request('PUT', `/v1/track/${trackId}`, body);
+  }
+
   deleteTrack(trackId: string) {
     return this.request('DELETE', `/v1/track/${trackId}`);
+  }
+
+  createTrackVariant(trackId: string, body: Record<string, unknown>) {
+    return this.request('POST', `/v1/track/${trackId}/variant`, body);
+  }
+
+  getPlayTrack(playSessionId: string, playTrackId: string) {
+    return this.request(
+      'GET',
+      `/v1/play/${playSessionId}/${playTrackId}`,
+    );
   }
 
   // --- Upload sessions ---
@@ -225,9 +240,11 @@ export class AdnClient {
   createPlaySession(
     scope: 'collection' | 'track',
     body: {
-      variants?: string[];
+      variants: string[];
       collection_id?: string;
       track_id?: string;
+      is_downloadable?: boolean;
+      expires_in?: number;
     },
   ) {
     return this.request('POST', `/v1/play_session/${scope}`, body);

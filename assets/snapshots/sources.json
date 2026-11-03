@@ -1,18 +1,20 @@
 {
   "openapiVersion": "1.0.0",
-  "generatedBy": "scripts/sync-canonical.mjs",
+  "generatedBy": "local copy from audiodn-mono/www/public",
   "sources": [
     {
       "name": "openapi.json",
       "url": "https://audiodeliverynetwork.com/openapi.json",
-      "fetchedAt": "2026-07-14",
-      "sha256": "e1554673a4d7287a15460bdc2761e0bbc38286b4e101df26b00fc5e9205e2deb"
+      "fetchedAt": "2026-11-02",
+      "sha256": "4f1dc03f555b7c841de207fc88685032f33c6a08c7917595dd84cf7920367ab2",
+      "note": "copied from audiodn-mono/www/public before site deploy"
     },
     {
       "name": "llms-full.txt",
       "url": "https://audiodeliverynetwork.com/llms-full.txt",
-      "fetchedAt": "2026-07-14",
-      "sha256": "5374d9eaa65c8b7641fa8881db814484e178fbd9620d6f7be22ae3ef56349b65"
+      "fetchedAt": "2026-11-02",
+      "sha256": "fac22b502d917eb02ecd2ff90603b4bc47ff9588159cacd54b879a1a0bc5fe71",
+      "note": "copied from audiodn-mono/www/public before site deploy"
     }
   ]
 }

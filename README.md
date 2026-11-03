@@ -192,10 +192,14 @@ env = { ADN_API_KEY = "adn_..." }
 | `adn_create_collection` / `adn_update_collection` | Create/update collection | write |
 | `adn_delete_collection` | Delete collection + its tracks | destructive (gated) |
 | `adn_list_tracks` / `adn_get_track` | Read tracks; `adn_get_track` polls readiness | read-only |
+| `adn_update_track` | Update track metadata / player fields | write |
+| `adn_delete_track` | Soft-delete one track | destructive (gated) |
 | `adn_create_upload_session` / `adn_get_upload_session` | Manage upload sessions | write / read-only |
 | `adn_create_track_in_upload_session` | Register a track, get `track_upload.upload_url` | write |
-| `adn_create_play_session` / `adn_get_play_session` | Mint/read play sessions (scope: collection, track) | write / read-only |
+| `adn_create_play_session` / `adn_get_play_session` | Mint/read play sessions (`variants` required) | write / read-only |
+| `adn_get_play_track` | Signed URLs for a track inside a play session | read-only |
 | `adn_list_variants` | List org delivery variants | read-only |
+| `adn_create_track_variant` | Add a track-specific transcode/preview variant | write |
 
 ## Resources
 
@@ -213,8 +217,10 @@ An agent helping a user host a podcast might call:
 4. `adn_create_track_in_upload_session({ upload_session_id, file_name: "ep1.mp3" })`
 5. Your code `PUT`s the audio bytes to `track_upload.upload_url`.
 6. Poll `adn_get_track({ track_id })` until `track_status_id === "ready"`.
-7. `adn_create_play_session({ scope: "track", track_id })` — returns a signed
-   playback URL that can be embedded directly.
+7. `adn_list_variants()` — pick real delivery indexes (e.g. `hq`, `lq`).
+8. `adn_create_play_session({ scope: "track", track_id, variants: ["hq"] })` —
+   returns a `play_session_id` (for the ADN Player) plus signed file URLs on
+   `first_track` (for a custom player).
 
 ## Build from source
 

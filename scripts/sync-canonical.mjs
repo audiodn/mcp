@@ -16,9 +16,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP = join(ROOT, 'assets', 'snapshots');
 
 const SITE = process.env.AUDIODN_SITE || 'https://audiodeliverynetwork.com';
+// Optional local monorepo public dir (e.g. ../audiodn-mono/www/public) so sync
+// can pick up OpenAPI fixes before the marketing site is redeployed.
+const LOCAL_PUBLIC = process.env.AUDIODN_LOCAL_PUBLIC || '';
 const TARGETS = [
-  { name: 'openapi.json', url: `${SITE}/openapi.json` },
-  { name: 'llms-full.txt', url: `${SITE}/llms-full.txt` },
+  { name: 'openapi.json', url: `${SITE}/openapi.json`, local: 'openapi.json' },
+  { name: 'llms-full.txt', url: `${SITE}/llms-full.txt`, local: 'llms-full.txt' },
 ];
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -30,15 +33,26 @@ async function fetchText(url) {
 }
 
 async function main() {
+  const { readFileSync, existsSync } = await import('node:fs');
   const today = new Date().toISOString().slice(0, 10);
   const sources = [];
   let openapiVersion = 'unknown';
 
   for (const t of TARGETS) {
-    process.stdout.write(`Fetching ${t.url} ... `);
-    const body = await fetchText(t.url);
+    let body;
+    let sourceUrl = t.url;
+    if (LOCAL_PUBLIC) {
+      const localPath = join(LOCAL_PUBLIC, t.local);
+      if (!existsSync(localPath)) throw new Error(`Missing local file ${localPath}`);
+      process.stdout.write(`Reading ${localPath} ... `);
+      body = readFileSync(localPath, 'utf8');
+      sourceUrl = `file://${localPath}`;
+    } else {
+      process.stdout.write(`Fetching ${t.url} ... `);
+      body = await fetchText(t.url);
+    }
     writeFileSync(join(SNAP, t.name), body);
-    sources.push({ name: t.name, url: t.url, fetchedAt: today, sha256: sha256(body) });
+    sources.push({ name: t.name, url: sourceUrl, fetchedAt: today, sha256: sha256(body) });
     console.log(`ok (${body.length} bytes)`);
     if (t.name === 'openapi.json') {
       openapiVersion = JSON.parse(body).info?.version || 'unknown';

@@ -55,9 +55,13 @@ describe('server registry', () => {
     expect(names).toContain('adn_list_operations');
     expect(names).not.toContain('adn_delete_collection');
     expect(names).not.toContain('adn_delete_creator');
+    expect(names).not.toContain('adn_delete_track');
+    expect(names).toContain('adn_update_track');
+    expect(names).toContain('adn_create_track_variant');
+    expect(names).toContain('adn_get_play_track');
   });
 
-  it('annotates tools (read-only vs write) and drops the playlist scope', async () => {
+  it('annotates tools (read-only vs write) and requires play-session variants', async () => {
     harness = await connect(false);
     const { tools } = await harness.client.listTools();
     const getTrack = tools.find((t) => t.name === 'adn_get_track');
@@ -67,6 +71,9 @@ describe('server registry', () => {
     const scopeEnum = (playSession?.inputSchema as any)?.properties?.scope?.enum;
     expect(scopeEnum).toEqual(['collection', 'track']);
     expect((playSession?.inputSchema as any)?.properties?.playlist_id).toBeUndefined();
+    expect((playSession?.inputSchema as any)?.required).toEqual(
+      expect.arrayContaining(['scope', 'variants']),
+    );
   });
 
   it('exposes delete tools with destructiveHint when enabled', async () => {
@@ -75,6 +82,9 @@ describe('server registry', () => {
     const del = tools.find((t) => t.name === 'adn_delete_collection');
     expect(del).toBeTruthy();
     expect(del?.annotations?.destructiveHint).toBe(true);
+    expect(tools.find((t) => t.name === 'adn_delete_track')?.annotations?.destructiveHint).toBe(
+      true,
+    );
   });
 
   it('refuses a gated delete when not enabled, with a helpful message', async () => {

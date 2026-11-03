@@ -15,10 +15,11 @@ describe('DocStore (offline)', () => {
     expect(about.apiBase).toContain('api.audiodelivery.net');
   });
 
-  it('lists all 30 canonical operations with operationIds', () => {
+  it('lists all 31 canonical operations with operationIds', () => {
     const ops = store.listOperations();
-    expect(ops.length).toBe(30);
+    expect(ops.length).toBe(31);
     expect(ops.every((o) => o.operationId && o.method && o.path)).toBe(true);
+    expect(ops.some((o) => o.path === '/v1/stream/{track_id}/{api_key}')).toBe(true);
   });
 
   it('resolves a known operationId', () => {
