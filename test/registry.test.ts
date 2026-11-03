@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AdnClient } from '../src/client.js';
 import { loadDocStore } from '../src/docs/load-node.js';
+import { SERVER_INSTRUCTIONS } from '../src/instructions.js';
 import { buildServer } from '../src/server.js';
 
 interface Harness {
@@ -10,13 +11,12 @@ interface Harness {
   close: () => Promise<void>;
 }
 
-async function connect(allowDelete: boolean): Promise<Harness> {
+async function connect(withClient = true): Promise<Harness> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer({
-    client: new AdnClient({ apiKey: 'adn_test' }),
+    client: withClient ? new AdnClient({ apiKey: 'adn_test' }) : undefined,
     store: loadDocStore(),
     version: '9.9.9',
-    allowDelete,
   });
   await server.connect(serverTransport);
   const client = new Client({ name: 'test', version: '1.0.0' });
@@ -42,27 +42,58 @@ function firstText(res: any): string {
 
 describe('server registry', () => {
   it('reports the injected server version', async () => {
-    harness = await connect(false);
+    harness = await connect();
     expect(harness.client.getServerVersion()?.version).toBe('9.9.9');
   });
 
-  it('hides delete tools by default and exposes knowledge + API tools', async () => {
-    harness = await connect(false);
+  it('exposes knowledge + API tools including deletes and create_track', async () => {
+    harness = await connect();
     const { tools } = await harness.client.listTools();
     const names = tools.map((t) => t.name);
     expect(names).toContain('adn_list_collections');
     expect(names).toContain('adn_search_docs');
     expect(names).toContain('adn_list_operations');
-    expect(names).not.toContain('adn_delete_collection');
-    expect(names).not.toContain('adn_delete_creator');
-    expect(names).not.toContain('adn_delete_track');
+    expect(names).toContain('adn_delete_collection');
+    expect(names).toContain('adn_delete_creator');
+    expect(names).toContain('adn_delete_track');
+    expect(names).toContain('adn_create_track');
     expect(names).toContain('adn_update_track');
+    expect(names).toContain('adn_list_output_presets');
+    expect(names).toContain('adn_get_output_preset');
+    expect(names).toContain('adn_create_track_output');
     expect(names).toContain('adn_create_track_variant');
     expect(names).toContain('adn_get_play_track');
+    expect(names).toContain('adn_get_organization');
+    expect(names).toContain('adn_create_client_key');
+    expect(names).toContain('adn_create_collection_cover');
+    expect(names).toContain('adn_create_track_cover');
+    expect(names).toContain('adn_get_variant');
+    expect(names).toContain('adn_list_variants');
+    expect(names).toContain('adn_get_play_download');
+    expect(names).toContain('adn_list_output_types');
+  });
+
+  it('exposes only knowledge tools when no API client is configured', async () => {
+    harness = await connect(false);
+    const { tools } = await harness.client.listTools();
+    const names = tools.map((t) => t.name);
+    expect(names).toContain('adn_about');
+    expect(names).toContain('adn_search_docs');
+    expect(names.some((n) => n.includes('create') || n.includes('list_creators'))).toBe(
+      false,
+    );
+  });
+
+  it('advertises server instructions on initialize', async () => {
+    harness = await connect();
+    const instructions = harness.client.getInstructions();
+    expect(instructions).toBe(SERVER_INSTRUCTIONS);
+    expect(instructions).toMatch(/track_status_id/);
+    expect(instructions).toMatch(/confirm with the user/);
   });
 
   it('annotates tools (read-only vs write) and requires play-session variants', async () => {
-    harness = await connect(false);
+    harness = await connect();
     const { tools } = await harness.client.listTools();
     const getTrack = tools.find((t) => t.name === 'adn_get_track');
     expect(getTrack?.annotations?.readOnlyHint).toBe(true);
@@ -74,10 +105,21 @@ describe('server registry', () => {
     expect((playSession?.inputSchema as any)?.required).toEqual(
       expect.arrayContaining(['scope', 'variants']),
     );
+    expect(
+      (playSession?.inputSchema as any)?.properties?.variants?.minItems,
+    ).toBe(1);
+
+    const upload = tools.find((t) => t.name === 'adn_create_upload_session');
+    expect(
+      (upload?.inputSchema as any)?.properties?.track?.properties?.file_name,
+    ).toBeTruthy();
+    expect(
+      (upload?.inputSchema as any)?.properties?.expires_in?.maximum,
+    ).toBe(86400);
   });
 
-  it('exposes delete tools with destructiveHint when enabled', async () => {
-    harness = await connect(true);
+  it('exposes delete tools with destructiveHint', async () => {
+    harness = await connect();
     const { tools } = await harness.client.listTools();
     const del = tools.find((t) => t.name === 'adn_delete_collection');
     expect(del).toBeTruthy();
@@ -87,18 +129,8 @@ describe('server registry', () => {
     );
   });
 
-  it('refuses a gated delete when not enabled, with a helpful message', async () => {
-    harness = await connect(false);
-    const res: any = await harness.client.callTool({
-      name: 'adn_delete_collection',
-      arguments: { collection_id: '00000000-0000-0000-0000-000000000000' },
-    });
-    expect(res.isError).toBe(true);
-    expect(firstText(res)).toMatch(/ADN_MCP_ALLOW_DELETE=1/);
-  });
-
   it('runs an offline knowledge tool without any network', async () => {
-    harness = await connect(false);
+    harness = await connect();
     const res: any = await harness.client.callTool({
       name: 'adn_list_variant_types',
       arguments: {},
@@ -109,7 +141,7 @@ describe('server registry', () => {
   });
 
   it('rejects invalid arguments', async () => {
-    harness = await connect(false);
+    harness = await connect();
     const res: any = await harness.client.callTool({
       name: 'adn_get_operation',
       arguments: {},
@@ -119,16 +151,18 @@ describe('server registry', () => {
   });
 });
 
-describe('server resources', () => {
-  it('lists openapi + guide resources and reads openapi', async () => {
-    harness = await connect(false);
+describe('resources', () => {
+  it('lists and reads OpenAPI + guides', async () => {
+    harness = await connect();
     const { resources } = await harness.client.listResources();
     const uris = resources.map((r) => r.uri);
     expect(uris).toContain('audiodn://openapi.json');
-    expect(uris).toContain('audiodn://guide/upload');
+    expect(uris).toContain('audiodn://llms-full.txt');
+    expect(uris).toContain('audiodn://guide/authentication');
 
-    const read: any = await harness.client.readResource({ uri: 'audiodn://openapi.json' });
-    const spec = JSON.parse(read.contents[0].text);
-    expect(spec.info.version).toBe('1.0.0');
+    const openapi: any = await harness.client.readResource({
+      uri: 'audiodn://openapi.json',
+    });
+    expect(openapi.contents?.[0]?.text).toMatch(/openapi/);
   });
 });

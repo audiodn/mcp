@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.0
+
+- Canonical output-preset tools: `adn_list_output_presets`, `adn_get_output_preset`,
+  `adn_create_track_output`, and `adn_list_output_types`. Legacy names
+  (`adn_list_variants`, `adn_get_variant`, `adn_create_track_variant`,
+  `adn_list_variant_types`) remain as one-line aliases sharing the same handlers.
+- Client calls canonical paths `GET /v1/output_preset`,
+  `GET /v1/output_preset/:id`, and `POST /v1/track/:track_id/output`.
+- Play-session tool descriptions talk about output indexes while documenting the
+  historical `variants` body field still used on the wire.
+- Guides: added `output-types`; updated processing/playback/upload/webhooks/
+  authentication terminology.
+
+## 0.4.0
+
+- Hosted MCP uses OAuth 2.1 (authorization code + PKCE) against the AudioDN
+  account: protected-resource / authorization-server metadata, consent at
+  `/connect/mcp`, encrypted API Access grants in KV, audience-bound JWTs.
+  Legacy API Access Bearer / `X-ADN-API-Key` still works. Unauthenticated
+  hosted `/mcp` returns `401` with `WWW-Authenticate` (no anonymous tools).
+- Destructive delete tools are always available when authenticated
+  (`destructiveHint: true`); removed `ADN_MCP_ALLOW_DELETE` /
+  `X-ADN-Allow-Delete`.
+- Added `adn_create_track` for `POST /v1/track`.
+- Install configs and docs prefer the bare hosted URL (OAuth) over pasting a key.
+
+## 0.3.6
+
+- Stdio starts without `ADN_API_KEY` (knowledge tools only); hosted ignores empty
+  / uninterpolated `${env:ADN_API_KEY}` placeholders.
+- Shared server instructions + MCP resources on both stdio and the hosted Worker.
+- Schema parity: upload session `expires_in` + nested `track`, track player
+  fields on session track create, collection cover/theme override flags,
+  play-session scope/id validation, empty-update rejection, JSON Schema
+  `minItems` for `variants`.
+- New tools: `adn_get_organization`, `adn_update_organization`,
+  `adn_create_client_key`, `adn_create_collection_cover`, `adn_create_track_cover`,
+  `adn_get_variant`, `adn_get_play_download`.
+- Hosted delete opt-in via `X-ADN-Allow-Delete: 1` (stdio still uses
+  `ADN_MCP_ALLOW_DELETE=1`). Caller API key redacted from error messages.
+- Offline contract test maps every bundled OpenAPI `operationId` to a tool or an
+  explicit omission. Registry package version aligned; `ADN_API_KEY` marked
+  optional in `server.json`.
+
 ## 0.3.5
 
 - Refreshed bundled OpenAPI snapshot: `track.track_status_id` (eight real

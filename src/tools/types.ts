@@ -14,8 +14,6 @@ export interface ToolDef {
   description: string;
   inputSchema: z.ZodType<any>;
   annotations?: McpToolAnnotations;
-  /** Tools flagged 'delete' are hidden unless ADN_MCP_ALLOW_DELETE=1. */
-  gated?: 'delete';
   handler: (args: any) => Promise<unknown> | unknown;
 }
 

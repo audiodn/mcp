@@ -37,4 +37,25 @@ describe('zodToJsonSchema', () => {
     expect(json.properties.confirm).toMatchObject({ type: 'boolean' });
     expect(json.required).toBeUndefined();
   });
+
+  it('emits minItems / maxItems for array bounds', () => {
+    const schema = z.object({
+      variants: z.array(z.string().min(1)).min(1).max(8),
+    });
+    const json = zodToJsonSchema(schema);
+    expect(json.properties.variants).toMatchObject({
+      type: 'array',
+      minItems: 1,
+      maxItems: 8,
+      items: { type: 'string', minLength: 1 },
+    });
+  });
+
+  it('preserves descriptions on optional fields', () => {
+    const schema = z.object({
+      limit: z.number().int().optional().describe('page size'),
+    });
+    const json = zodToJsonSchema(schema);
+    expect(json.properties.limit.description).toBe('page size');
+  });
 });

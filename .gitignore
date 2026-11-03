@@ -5,3 +5,6 @@ coverage/
 .DS_Store
 *.log
 info.txt
+.dev.vars
+manual/.env
+.wrangler/

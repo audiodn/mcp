@@ -22,7 +22,8 @@ describe.skipIf(!built)('stdio smoke (built binary)', () => {
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [DIST_ENTRY],
-      env: { ...process.env, ADN_API_KEY: 'adn_smoke_test' },
+      // Knowledge-only smoke: omit ADN_API_KEY so live API tools (incl. deletes) stay off.
+      env: { ...process.env, ADN_API_KEY: '' },
     });
     client = new Client({ name: 'smoke', version: '1.0.0' });
     await client.connect(transport);
@@ -31,6 +32,7 @@ describe.skipIf(!built)('stdio smoke (built binary)', () => {
     const names = tools.map((t) => t.name);
     expect(names).toContain('adn_about');
     expect(names).toContain('adn_list_operations');
+    expect(names).toContain('adn_list_output_types');
     expect(names).not.toContain('adn_delete_collection');
 
     const { resources } = await client.listResources();

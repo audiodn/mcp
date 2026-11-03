@@ -6,37 +6,31 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { AdnClient } from './client.js';
-import { DocStore, GUIDE_TOPICS } from './docs/store.js';
+import type { DocStore } from './docs/store.js';
+import { SERVER_INSTRUCTIONS } from './instructions.js';
+import { listResourceDescriptors, readResource } from './resources.js';
 import { zodToJsonSchema } from './schema.js';
-import { createApiTools } from './tools/api-tools.js';
-import { createKnowledgeTools } from './tools/knowledge-tools.js';
+import { selectTools } from './tools/select.js';
 import { runToolHandler, toolErrorResult } from './tools/run.js';
-import type { ToolDef } from './tools/types.js';
 
 export interface BuildServerOptions {
-  client: AdnClient;
+  /** When omitted, only knowledge tools are registered. */
+  client?: AdnClient;
   store: DocStore;
   version: string;
-  allowDelete: boolean;
 }
 
 export function buildServer(opts: BuildServerOptions): Server {
-  const { client, store, version, allowDelete } = opts;
+  const { client, store, version } = opts;
 
-  const allTools: ToolDef[] = [
-    ...createApiTools(client),
-    ...createKnowledgeTools(store),
-  ];
-
-  // Hide delete tools entirely unless explicitly enabled, so the model never
-  // sees a destructive capability it is not allowed to use.
-  const visibleTools = allTools.filter(
-    (t) => t.gated !== 'delete' || allowDelete,
-  );
+  const visibleTools = selectTools(store, { client });
 
   const server = new Server(
     { name: 'audiodn-mcp', version },
-    { capabilities: { tools: {}, resources: {} } },
+    {
+      capabilities: { tools: {}, resources: {} },
+      instructions: SERVER_INSTRUCTIONS,
+    },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -49,14 +43,9 @@ export function buildServer(opts: BuildServerOptions): Server {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const tool = allTools.find((t) => t.name === req.params.name);
+    const tool = visibleTools.find((t) => t.name === req.params.name);
     if (!tool) {
       return toolErrorResult(`Unknown tool: ${req.params.name}`);
-    }
-    if (tool.gated === 'delete' && !allowDelete) {
-      return toolErrorResult(
-        `${tool.name} is disabled. Restart the AudioDN MCP server with ADN_MCP_ALLOW_DELETE=1 to enable destructive delete tools.`,
-      );
     }
     const parsed = tool.inputSchema.safeParse(req.params.arguments ?? {});
     if (!parsed.success) {
@@ -74,50 +63,19 @@ export function buildServer(opts: BuildServerOptions): Server {
 
 function registerResources(server: Server, store: DocStore) {
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: [
-      {
-        uri: 'audiodn://openapi.json',
-        name: 'AudioDN OpenAPI specification',
-        mimeType: 'application/json',
-      },
-      {
-        uri: 'audiodn://llms-full.txt',
-        name: 'AudioDN llms-full.txt (full docs summary)',
-        mimeType: 'text/plain',
-      },
-      ...GUIDE_TOPICS.map((topic) => ({
-        uri: `audiodn://guide/${topic}`,
-        name: `AudioDN guide: ${topic}`,
-        mimeType: 'text/markdown',
-      })),
-    ],
+    resources: listResourceDescriptors(),
   }));
 
   server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
     const uri = req.params.uri;
-    if (uri === 'audiodn://openapi.json') {
-      return {
-        contents: [
-          { uri, mimeType: 'application/json', text: store.openapiJson() },
-        ],
-      };
+    const content = readResource(store, uri);
+    if (!content) {
+      throw new Error(`Unknown resource: ${uri}`);
     }
-    if (uri === 'audiodn://llms-full.txt') {
-      return {
-        contents: [
-          { uri, mimeType: 'text/plain', text: store.llmsFullText() },
-        ],
-      };
-    }
-    const guideMatch = uri.match(/^audiodn:\/\/guide\/(.+)$/);
-    if (guideMatch) {
-      const content = store.getGuide(guideMatch[1]);
-      if (content) {
-        return {
-          contents: [{ uri, mimeType: 'text/markdown', text: content }],
-        };
-      }
-    }
-    throw new Error(`Unknown resource: ${uri}`);
+    return {
+      contents: [
+        { uri: content.uri, mimeType: content.mimeType, text: content.text },
+      ],
+    };
   });
 }

@@ -15,11 +15,13 @@ describe('DocStore (offline)', () => {
     expect(about.apiBase).toContain('api.audiodelivery.net');
   });
 
-  it('lists all 31 canonical operations with operationIds', () => {
+  it('lists all canonical operations with operationIds', () => {
     const ops = store.listOperations();
-    expect(ops.length).toBe(31);
+    expect(ops.length).toBe(34);
     expect(ops.every((o) => o.operationId && o.method && o.path)).toBe(true);
     expect(ops.some((o) => o.path === '/v1/stream/{track_id}/{api_key}')).toBe(true);
+    expect(ops.some((o) => o.path === '/v1/output_preset')).toBe(true);
+    expect(ops.some((o) => o.path === '/v1/track/{track_id}/output')).toBe(true);
   });
 
   it('resolves a known operationId', () => {
@@ -62,11 +64,19 @@ describe('knowledge tools', () => {
       'adn_list_operations',
       'adn_get_operation',
       'adn_get_guide',
+      'adn_list_output_types',
       'adn_list_variant_types',
     ]) {
       expect(byName.has(name), `missing tool: ${name}`).toBe(true);
       expect(byName.get(name)!.annotations?.readOnlyHint).toBe(true);
     }
+  });
+
+  it('canonical and legacy output-type tools return the same catalog', () => {
+    const canonical = byName.get('adn_list_output_types')!.handler({});
+    const legacy = byName.get('adn_list_variant_types')!.handler({});
+    expect(canonical).toEqual(legacy);
+    expect((canonical as any).outputTypes.length).toBe(7);
   });
 
   it('adn_get_operation throws a helpful error for unknown ids', () => {

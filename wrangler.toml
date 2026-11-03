@@ -18,6 +18,15 @@ fallthrough = true
 
 [vars]
 ADN_API_BASE_URL = "https://api.audiodelivery.net"
+ACCOUNT_CONSENT_BASE_URL = "https://account.audiodeliverynetwork.com/connect/mcp"
+
+# Secrets (wrangler secret put): MCP_JWT_SECRET, MCP_GRANT_ENCRYPTION_KEY, MCP_INTERNAL_HMAC
+# KV: wrangler kv namespace create MCP_OAUTH then set id below.
+
+[[kv_namespaces]]
+binding = "MCP_OAUTH"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
 
 [observability]
 enabled = true

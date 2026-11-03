@@ -1,6 +1,6 @@
 {
   "name": "@audiodn/mcp",
-  "version": "0.3.5",
+  "version": "0.5.0",
   "description": "Model Context Protocol server for AudioDN. Exposes the ADN REST API as MCP tools plus offline, grounded documentation tools so AI agents (Cursor, Claude Desktop, Claude Code, etc.) can configure audio hosting on a user's behalf.",
   "mcpName": "net.audiodelivery/mcp",
   "type": "module",
@@ -24,6 +24,9 @@
     "sync": "node scripts/sync-canonical.mjs",
     "smoke": "node scripts/smoke.mjs",
     "dev:worker": "wrangler dev",
+    "dev:local": "wrangler dev --port 8788",
+    "manual:auth": "node manual/auth.mjs",
+    "manual": "node manual/run.mjs",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
     "prepublishOnly": "npm run test && npm run build && node scripts/check-snapshots.mjs"
@@ -54,6 +57,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "short-uuid": "^6.0.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

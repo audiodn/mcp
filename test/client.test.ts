@@ -61,7 +61,12 @@ describe('AdnClient', () => {
   it('never leaks the API key in error messages', async () => {
     const fetchMock = vi
       .fn()
-      .mockImplementation(async () => jsonResponse({ ok: false, message: 'boom' }, 500));
+      .mockImplementation(async () =>
+        jsonResponse(
+          { ok: false, message: 'denied for adn_super_secret_key' },
+          500,
+        ),
+      );
     vi.stubGlobal('fetch', fetchMock);
 
     const client = new AdnClient({ apiKey: 'adn_super_secret_key' });
@@ -71,7 +76,47 @@ describe('AdnClient', () => {
     } catch (err: any) {
       expect(err.status).toBe(500);
       expect(err.message).not.toContain('adn_super_secret_key');
+      expect(err.message).toContain('[REDACTED_API_KEY]');
     }
+  });
+
+  it('hits organization, cover, download, and api_key paths', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new AdnClient({ apiKey: 'adn_secret' });
+
+    await client.getOrganization('org-1');
+    await client.updateOrganization('org-1', { name: 'Acme' });
+    await client.createCollectionCover('c1');
+    await client.createTrackCover('t1');
+    await client.getVariant('v1');
+    await client.getPlayTrackDownload('ps1', 'pt1', 'hq');
+    await client.createApiKey({ title: 'Player', api_key_type_id: 'player' });
+    await client.createUploadSession({
+      collection_id: 'c1',
+      expires_in: 120,
+      track: { file_name: 'a.mp3' },
+    });
+
+    const urls = fetchMock.mock.calls.map((c) => [c[0], c[1].method]);
+    expect(urls).toContainEqual([
+      'https://api.audiodelivery.net/v1/organization/org-1',
+      'GET',
+    ]);
+    expect(urls).toContainEqual([
+      'https://api.audiodelivery.net/v1/collection/c1/cover',
+      'POST',
+    ]);
+    expect(urls).toContainEqual([
+      'https://api.audiodelivery.net/v1/play/ps1/pt1/hq/download',
+      'GET',
+    ]);
+    expect(urls).toContainEqual([
+      'https://api.audiodelivery.net/v1/api_key',
+      'POST',
+    ]);
   });
 
   it('retries transient 5xx on GET and eventually throws', async () => {

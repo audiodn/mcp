@@ -5,6 +5,7 @@ export const GUIDE_TOPICS = [
   'playback',
   'webhooks',
   'variant-types',
+  'output-types',
   'security',
   'compatibility',
 ] as const;
@@ -58,7 +59,7 @@ const VARIANT_TYPES: VariantTypeInfo[] = [
     type: 'transcode',
     title: 'Transcoded Version',
     description:
-      'Codec/bitrate/channel/metadata settings. Delivery index values like hq and lq are transcode variants.',
+      'Codec/bitrate/channel/metadata settings. Delivery index values like hq and lq are transcode output presets.',
     apiCreatable: true,
   },
   {

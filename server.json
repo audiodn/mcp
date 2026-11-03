@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "net.audiodelivery/mcp",
   "title": "Audio Delivery Network",
-  "description": "AI-manageable audio CDN: upload, transcode, stream & deliver audio variants, plus grounded docs.",
+  "description": "AI-manageable audio CDN: upload, transcode, stream & deliver audio outputs, plus grounded docs.",
   "websiteUrl": "https://audiodeliverynetwork.com/for-ai-agents/",
-  "version": "0.3.5",
+  "version": "0.5.0",
   "repository": {
     "url": "https://github.com/audiodn/mcp",
     "source": "github"
@@ -20,7 +20,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@audiodn/mcp",
-      "version": "0.3.4",
+      "version": "0.5.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -28,18 +28,13 @@
       "environmentVariables": [
         {
           "name": "ADN_API_KEY",
-          "description": "AudioDN server-side API key (adn_...). Required for live API tools; knowledge/doc tools work without it.",
-          "isRequired": true,
+          "description": "AudioDN server-side API Access key (adn_...). Optional — knowledge/doc tools work without it; live API tools activate when set. Prefer the hosted OAuth endpoint for account login.",
+          "isRequired": false,
           "isSecret": true
         },
         {
           "name": "ADN_API_BASE_URL",
           "description": "Override the AudioDN API base URL. Defaults to https://api.audiodelivery.net.",
-          "isRequired": false
-        },
-        {
-          "name": "ADN_MCP_ALLOW_DELETE",
-          "description": "Set to 1 to enable destructive delete tools. Off by default.",
           "isRequired": false
         }
       ]
@@ -48,15 +43,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.audiodelivery.net/mcp",
-      "headers": [
-        {
-          "name": "Authorization",
-          "description": "Bring your own AudioDN API key as a bearer token: 'Bearer adn_...'. Optional — knowledge/doc tools work with no key; live API tools activate when a key is sent.",
-          "isRequired": false,
-          "isSecret": true
-        }
-      ]
+      "url": "https://mcp.audiodelivery.net/mcp"
     }
   ],
   "_meta": {

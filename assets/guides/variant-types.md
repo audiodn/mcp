@@ -1,10 +1,13 @@
-# Variant types
+# Output types (legacy guide slug: variant-types)
 
-A variant is a processed derivative of an uploaded track. AudioDN supports seven
-variant types:
+Prefer the `output-types` guide topic. Output presets were previously called
+variants; the type catalog is the same.
+
+An **output preset** is a reusable configuration that defines what AudioDN
+generates from an upload. AudioDN supports seven output types:
 
 1. **Transcoded Version** (`transcode`) — codec / bitrate / channel / metadata
-   settings. Delivery `index` values like `hq` and `lq` are transcode variants.
+   settings. Delivery `index` values like `hq` and `lq` are transcode outputs.
 2. **Preview Clip** (`preview`) — a clipped preview with its own transcode options.
 3. **Audio Analysis** (`levels`) — waveform sample metrics. A default 320-sample
    waveform is generated for free.
@@ -17,12 +20,9 @@ variant types:
 
 Two related concepts:
 
-- **`variant_type_id`** — the recipe type (one of the seven above).
-- **delivery `index`** — the per-organization name used in play sessions and
-  signed URLs (e.g. `hq`, `lq`, `preview`, `waveform`). This is org-configured,
-  not a global enum. Use `adn_list_variants` to see the variants configured on
-  your organization.
+- **`output_type_id`** (legacy: `variant_type_id`) — the recipe type.
+- **delivery / output `index`** — org-configured name used in play sessions and
+  signed URLs. Use `adn_list_output_presets` (GET `/v1/output_preset`).
 
-API surface note: only `transcode` and `preview` variant types can be created
-through the REST API (`POST /v1/track/{track_id}/variant`). The other types are
-produced automatically during processing or configured in the dashboard.
+Only `transcode` and `preview` are API-creatable via
+`POST /v1/track/{track_id}/output` (legacy: `.../variant`).

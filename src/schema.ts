@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Minimal Zod -> JSON Schema conversion sufficient for MCP tool descriptors.
  * Avoids pulling in zod-to-json-schema for a thin shim. Emits `description`
- * (from `.describe()`), enums, defaults, and common string/number constraints.
+ * (from `.describe()`), enums, defaults, and common string/number/array constraints.
  */
 export function zodToJsonSchema(schema: z.ZodType<any>): Record<string, any> {
   const out = convert(schema);
@@ -34,12 +34,25 @@ function convert(schema: z.ZodType<any>): Record<string, any> {
     };
   }
   if (schema instanceof z.ZodOptional) {
-    return zodToJsonSchema((schema as any)._def.innerType);
+    const inner = zodToJsonSchema((schema as any)._def.innerType);
+    const description = (schema as any)?._def?.description;
+    if (description && typeof inner === 'object' && !('description' in inner)) {
+      return { ...inner, description };
+    }
+    return inner;
   }
   if (schema instanceof z.ZodDefault) {
     const inner = zodToJsonSchema((schema as any)._def.innerType);
     const def = (schema as any)._def.defaultValue;
-    return { ...inner, default: typeof def === 'function' ? def() : def };
+    const description = (schema as any)?._def?.description;
+    const out: Record<string, any> = {
+      ...inner,
+      default: typeof def === 'function' ? def() : def,
+    };
+    if (description && !('description' in out)) {
+      out.description = description;
+    }
+    return out;
   }
   if (schema instanceof z.ZodString) {
     const desc: Record<string, any> = { type: 'string' };
@@ -69,10 +82,16 @@ function convert(schema: z.ZodType<any>): Record<string, any> {
     return { type: 'string', enum: (schema as any)._def.values };
   }
   if (schema instanceof z.ZodArray) {
-    return {
+    const desc: Record<string, any> = {
       type: 'array',
       items: zodToJsonSchema((schema as any)._def.type),
     };
+    const min = (schema as any)._def.minLength;
+    const max = (schema as any)._def.maxLength;
+    // Zod 3 stores { value: number } on minLength/maxLength when set.
+    if (min && typeof min.value === 'number') desc.minItems = min.value;
+    if (max && typeof max.value === 'number') desc.maxItems = max.value;
+    return desc;
   }
   if (schema instanceof z.ZodRecord) {
     return { type: 'object', additionalProperties: true };

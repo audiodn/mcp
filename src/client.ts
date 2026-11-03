@@ -36,6 +36,11 @@ export class AdnClient {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
+  /** The configured Bearer key (for deriving organization_id). Never log this. */
+  getApiKey(): string {
+    return this.apiKey;
+  }
+
   async request<T = unknown>(
     method: string,
     path: string,
@@ -75,11 +80,11 @@ export class AdnClient {
         if (!res.ok || (parsed && parsed.ok === false)) {
           // Retry transient server-side / rate-limit failures on safe methods.
           if (shouldRetry(res.status) && idempotent && attempt < MAX_RETRIES) {
-            lastErr = makeError(parsed, method, path, res.status);
+            lastErr = makeError(parsed, method, path, res.status, this.apiKey);
             await backoff(attempt);
             continue;
           }
-          throw makeError(parsed, method, path, res.status);
+          throw makeError(parsed, method, path, res.status, this.apiKey);
         }
 
         return parsed as T;
@@ -110,6 +115,15 @@ export class AdnClient {
   // --- Organizations ---
   getOrganization(organizationId: string) {
     return this.request('GET', `/v1/organization/${organizationId}`);
+  }
+
+  updateOrganization(organizationId: string, body: Record<string, unknown>) {
+    return this.request('PUT', `/v1/organization/${organizationId}`, body);
+  }
+
+  // --- API keys (client-side only; never create API Access keys) ---
+  createApiKey(body: Record<string, unknown>) {
+    return this.request('POST', `/v1/api_key`, body);
   }
 
   // --- Creators ---
@@ -152,6 +166,8 @@ export class AdnClient {
     metadata?: Record<string, unknown>;
     player_color?: string;
     player_subtitle?: string;
+    is_cover_overridable?: boolean;
+    is_theme_overridable?: boolean;
   }) {
     return this.request('POST', `/v1/collection`, body);
   }
@@ -162,6 +178,10 @@ export class AdnClient {
 
   deleteCollection(collectionId: string) {
     return this.request('DELETE', `/v1/collection/${collectionId}`);
+  }
+
+  createCollectionCover(collectionId: string) {
+    return this.request('POST', `/v1/collection/${collectionId}/cover`);
   }
 
   // --- Tracks ---
@@ -179,19 +199,6 @@ export class AdnClient {
     return this.request('GET', `/v1/track/${trackId}`);
   }
 
-  createTrack(body: {
-    collection_id: string;
-    file_name: string;
-    creator_id?: string;
-    organization_index?: string;
-    metadata?: Record<string, unknown>;
-    player_title?: string;
-    player_subtitle?: string;
-    player_color?: string;
-  }) {
-    return this.request('POST', `/v1/track`, body);
-  }
-
   updateTrack(trackId: string, body: Record<string, unknown>) {
     return this.request('PUT', `/v1/track/${trackId}`, body);
   }
@@ -200,8 +207,27 @@ export class AdnClient {
     return this.request('DELETE', `/v1/track/${trackId}`);
   }
 
+  createTrack(body: {
+    file_name: string;
+    collection_id?: string;
+    creator_id?: string;
+    organization_index?: string;
+    metadata?: Record<string, unknown>;
+    player_title?: string;
+    player_subtitle?: string;
+    player_color?: string;
+    is_cover_overridable?: boolean;
+    is_theme_overridable?: boolean;
+  }) {
+    return this.request('POST', `/v1/track`, body);
+  }
+
+  createTrackCover(trackId: string) {
+    return this.request('POST', `/v1/track/${trackId}/cover`);
+  }
+
   createTrackVariant(trackId: string, body: Record<string, unknown>) {
-    return this.request('POST', `/v1/track/${trackId}/variant`, body);
+    return this.request('POST', `/v1/track/${trackId}/output`, body);
   }
 
   getPlayTrack(playSessionId: string, playTrackId: string) {
@@ -211,12 +237,25 @@ export class AdnClient {
     );
   }
 
+  getPlayTrackDownload(
+    playSessionId: string,
+    playTrackId: string,
+    variantIndex: string,
+  ) {
+    return this.request(
+      'GET',
+      `/v1/play/${playSessionId}/${playTrackId}/${encodeURIComponent(variantIndex)}/download`,
+    );
+  }
+
   // --- Upload sessions ---
   createUploadSession(body: {
     collection_id: string;
     creator_id?: string;
     organization_index?: string;
     metadata?: Record<string, unknown>;
+    expires_in?: number;
+    track?: Record<string, unknown>;
   }) {
     return this.request('POST', `/v1/upload_session`, body);
   }
@@ -231,6 +270,11 @@ export class AdnClient {
       file_name: string;
       organization_index?: string;
       metadata?: Record<string, unknown>;
+      player_title?: string;
+      player_subtitle?: string;
+      player_color?: string;
+      is_cover_overridable?: boolean;
+      is_theme_overridable?: boolean;
     },
   ) {
     return this.request('POST', `/v1/upload/${uploadSessionId}/track`, body);
@@ -254,9 +298,13 @@ export class AdnClient {
     return this.request('GET', `/v1/play_session/${playSessionId}`);
   }
 
-  // --- Variants ---
+  // --- Output presets (legacy client names: listVariants / getVariant) ---
   listVariants(params?: { limit?: number; offset?: number }) {
-    return this.request('GET', `/v1/variant${listQuery(params)}`);
+    return this.request('GET', `/v1/output_preset${listQuery(params)}`);
+  }
+
+  getVariant(variantId: string) {
+    return this.request('GET', `/v1/output_preset/${variantId}`);
   }
 }
 
@@ -277,15 +325,21 @@ function backoff(attempt: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function redactKey(text: string, apiKey: string): string {
+  if (!apiKey || !text.includes(apiKey)) return text;
+  return text.split(apiKey).join('[REDACTED_API_KEY]');
+}
+
 function makeError(
   parsed: any,
   method: string,
   path: string,
   status: number,
+  apiKey: string,
 ): ApiError {
-  const err = new Error(
-    parsed?.message || `AudioDN ${method} ${path} failed with HTTP ${status}`,
-  ) as ApiError;
+  const raw =
+    parsed?.message || `AudioDN ${method} ${path} failed with HTTP ${status}`;
+  const err = new Error(redactKey(String(raw), apiKey)) as ApiError;
   err.status = status;
   err.apiRequestId = parsed?.api_request_id;
   return err;

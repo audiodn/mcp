@@ -1,0 +1,24 @@
+# Copy to .dev.vars for local wrangler (gitignored). Used by `npm run dev:local`.
+#
+# Terminals:
+#   audiodn-mono: npm run dev:api          → http://127.0.0.1:8787
+#   mcp:          npm run dev:local        → http://127.0.0.1:8788
+
+# Which AudioDN API this MCP worker calls
+ADN_API_BASE_URL=http://127.0.0.1:8787
+
+# OAuth issuer / resource must match the URL clients hit
+MCP_ISSUER=http://127.0.0.1:8788
+MCP_RESOURCE=http://127.0.0.1:8788/mcp
+
+# Local-only: same-origin consent page that grants ADN_API_KEY below
+MCP_DEV_MODE=1
+
+# API Access key from the dashboard (Settings → API Keys). Used after OAuth
+# on the local worker; never committed.
+ADN_API_KEY=
+
+# Any local strings (not for production)
+MCP_JWT_SECRET=local-dev-jwt-secret-at-least-32-chars
+MCP_GRANT_ENCRYPTION_KEY=local-dev-grant-encryption-key-32c
+MCP_INTERNAL_HMAC=local-dev-internal-hmac-secret-value

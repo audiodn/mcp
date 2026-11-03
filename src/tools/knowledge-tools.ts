@@ -57,7 +57,7 @@ export function createKnowledgeTools(store: DocStore): ToolDef[] {
     {
       name: 'adn_get_guide',
       description:
-        'Get a concise, canonical guide for a core AudioDN concept. Topics: authentication, upload, processing, playback, webhooks, variant-types, security, compatibility.',
+        'Get a concise, canonical guide for a core AudioDN concept. Topics: authentication, upload, processing, playback, webhooks, output-types (alias: variant-types), security, compatibility.',
       inputSchema: z.object({ topic: z.enum(GUIDE_TOPICS) }),
       annotations: { ...LOCAL_READ_ONLY, title: 'Get guide' },
       handler: (args: any) => {
@@ -71,12 +71,24 @@ export function createKnowledgeTools(store: DocStore): ToolDef[] {
       },
     },
     {
-      name: 'adn_list_variant_types',
+      name: 'adn_list_output_types',
       description:
-        'List the AudioDN variant types (transcode, preview, levels, waveform_video, waveform_image, original, cover) with descriptions and whether each can be created via the REST API. Use this to distinguish variant types from org delivery "index" values (see adn_list_variants).',
+        'List AudioDN output types (transcode, preview, levels, waveform_video, waveform_image, original, cover) with descriptions and whether each can be created via the REST API. Use this to distinguish output types from org delivery "index" values (see adn_list_output_presets).',
       inputSchema: z.object({}),
-      annotations: { ...LOCAL_READ_ONLY, title: 'List variant types' },
-      handler: () => ({ variantTypes: store.listVariantTypes() }),
+      annotations: { ...LOCAL_READ_ONLY, title: 'List output types' },
+      handler: listOutputTypes,
+    },
+    {
+      name: 'adn_list_variant_types',
+      description: 'Legacy name for adn_list_output_types',
+      inputSchema: z.object({}),
+      annotations: { ...LOCAL_READ_ONLY, title: 'List variant types (legacy)' },
+      handler: listOutputTypes,
     },
   ];
+
+  function listOutputTypes() {
+    const types = store.listVariantTypes();
+    return { outputTypes: types, variantTypes: types };
+  }
 }
