@@ -25,7 +25,7 @@ ACCOUNT_CONSENT_BASE_URL = "https://account.audiodeliverynetwork.com/connect/mcp
 
 [[kv_namespaces]]
 binding = "MCP_OAUTH"
-id = "00000000000000000000000000000000"
+id = "0cd52a9268304e0d91c9a669a2065a6d"
 preview_id = "00000000000000000000000000000000"
 
 [observability]
