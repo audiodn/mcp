@@ -23,7 +23,9 @@ execFileSync('npm', ['run', 'build'], { cwd: ROOT, stdio: 'inherit' });
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [ENTRY],
-  env: { ...process.env, ADN_API_KEY: 'adn_smoke_test' },
+  // Knowledge-only smoke: no API key, so live API tools (including deletes) stay off.
+  // Deletes are exposed whenever a key is set; they are not a separate opt-in.
+  env: { ...process.env, ADN_API_KEY: '' },
 });
 const client = new Client({ name: 'smoke', version: '1.0.0' });
 await client.connect(transport);
@@ -33,7 +35,8 @@ const names = tools.map((t) => t.name);
 console.log(`Listed ${names.length} tools.`);
 assert(names.includes('adn_about'), 'adn_about missing');
 assert(names.includes('adn_list_operations'), 'adn_list_operations missing');
-assert(!names.includes('adn_delete_collection'), 'delete tool should be hidden by default');
+assert(names.includes('adn_list_output_types'), 'adn_list_output_types missing');
+assert(!names.includes('adn_delete_collection'), 'delete tool should be hidden without an API key');
 
 const { resources } = await client.listResources();
 assert(
@@ -47,7 +50,7 @@ assert(about.openapiVersion === '1.0.0', `unexpected openapi version: ${about.op
 const ops = JSON.parse(
   (await client.callTool({ name: 'adn_list_operations', arguments: {} })).content[0].text,
 );
-assert(ops.operations.length === 31, `expected 31 operations, got ${ops.operations.length}`);
+assert(ops.operations.length === 34, `expected 34 operations, got ${ops.operations.length}`);
 
 await client.close();
 console.log('SMOKE OK');
