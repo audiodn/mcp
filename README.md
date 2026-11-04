@@ -222,7 +222,10 @@ key). On **stdio** they work without `ADN_API_KEY`.
 | `adn_create_collection` / `adn_update_collection` | Create/update collection | write |
 | `adn_delete_collection` | Delete collection + its tracks | destructive |
 | `adn_create_collection_cover` | Mint a fresh collection cover upload URL | write |
-| `adn_list_tracks` / `adn_get_track` | Read tracks; `adn_get_track` polls readiness | read-only |
+| `adn_list_tracks` / `adn_get_track` | Read tracks. `adn_get_track` is metadata; use processing tools for readiness | read-only |
+| `adn_find_resource` | Exact name lookup for collection, creator, or track. Ambiguous names return candidates and do not create | read-only |
+| `adn_get_processing` | Uncached snapshot: `upload_accepted`, `playable`, per-output state | read-only |
+| `adn_wait_for_processing` | Short wait (default 12s) for playback, one output, settle, or cover. `pending` means call again with the same ids | read-only |
 | `adn_create_track` | One-shot track create (`POST /v1/track`) with upload URL | write |
 | `adn_update_track` | Update track metadata / player fields | write |
 | `adn_delete_track` | Soft-delete one track | destructive |
@@ -251,8 +254,13 @@ An agent helping a user host a podcast might call:
    `track: { file_name }` to create the first track in the same call.
 4. `adn_create_track_in_upload_session({ upload_session_id, file_name: "ep1.mp3" })`
    (skip if you already nested `track` above).
-5. Your code `PUT`s the audio bytes to `track_upload.upload_url`.
-6. Poll `adn_get_track({ track_id })` until `track_status_id === "ready"`.
+5. Your code `PUT`s the audio bytes to `track_upload.upload_url`. Create does not upload.
+6. `adn_wait_for_processing({ target: "track_playback", track_id })`.
+   `pending` with `UPLOAD_NOT_ACCEPTED` means the PUT has not landed.
+   `pending` with `OUTPUT_PROCESSING` or `PROCESSING_TIMEOUT` means workers are
+   still running — call the same tool again with the same ids. `incomplete` can
+   still be playable. To wait for one file (waveform, preview), use
+   `target: "track_output"` and `output_index`.
 7. `adn_list_output_presets()` — pick real output indexes (e.g. `hq`, `lq`).
 8. `adn_create_play_session({ scope: "track", track_id, variants: ["hq"] })` —
    returns a `play_session_id` (for the ADN Player) plus signed file URLs on
@@ -282,7 +290,7 @@ cp .dev.vars.example .dev.vars  # set ADN_API_KEY to a dashboard API Access key
 npm run dev:local               # http://127.0.0.1:8788  (ADN_API_BASE_URL → local API)
 
 npm run manual:auth             # browser consent → writes manual/.env
-npm run manual                  # printable create/delete track scenarios
+npm run manual                  # find, create, processing-wait, dry-run, delete
 ```
 
 `ADN_API_BASE_URL` in `.dev.vars` (or the stdio environment) is the switch for

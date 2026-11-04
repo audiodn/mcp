@@ -200,6 +200,29 @@ describe('api tool handlers (mocked fetch)', () => {
     expect(urls.every((u) => !u.includes('/v1/variant'))).toBe(true);
   });
 
+  it('reads the uncached processing snapshot', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ok: true,
+        track_id: '00000000-0000-4000-8000-000000000030',
+        track_status_id: 'processing',
+        upload_accepted: true,
+        playable: false,
+        outputs: [{ index: 'hq', state: 'pending' }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { byName } = toolsByName();
+    const result: any = await byName.get('adn_get_processing')!.handler({
+      track_id: '00000000-0000-4000-8000-000000000030',
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.audiodelivery.net/v1/track/00000000-0000-4000-8000-000000000030/processing',
+    );
+    expect(result.track_status_id).toBe('processing');
+    expect(result.outputs[0].state).toBe('pending');
+  });
+
   it('validates share keys require exactly one variant', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { organizationIdFromApiKey } from '../api-key.js';
 import type { AdnClient } from '../client.js';
+import { findResource } from './find.js';
 import {
   DESTRUCTIVE,
   READ_ONLY,
@@ -8,6 +9,7 @@ import {
   WRITE_IDEMPOTENT,
   type ToolDef,
 } from './types.js';
+import { waitForProcessing } from './wait.js';
 
 const limitSchema = z.number().int().min(1).max(100).optional();
 const hexColor = z
@@ -150,10 +152,11 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_list_creators',
       description:
-        'List creators on the authenticated AudioDN organization. A creator is a sub-account (artist, podcaster, contributor) used to classify collections and tracks.',
+        'List creators on the authenticated AudioDN organization. Prefer adn_find_resource for name lookup. Optional q filters by organization_index.',
       inputSchema: z.object({
         limit: limitSchema,
         offset: z.number().int().min(0).optional(),
+        q: z.string().optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List creators' },
       handler: (args: any) => client.listCreators(args),
@@ -194,20 +197,38 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_delete_creator',
       description:
-        'Delete a creator. Destructive and irreversible; confirm with the user before calling.',
-      inputSchema: z.object({ creator_id: z.string().uuid() }),
+        'Delete a creator. Destructive. Pass dry_run=true to preview; confirm with the user before calling without dry_run.',
+      inputSchema: z.object({
+        creator_id: z.string().uuid(),
+        dry_run: z.boolean().optional(),
+      }),
       annotations: { ...DESTRUCTIVE, title: 'Delete creator' },
-      handler: (args: any) => client.deleteCreator(args.creator_id),
+      handler: async (args: any) => {
+        if (args.dry_run) {
+          const creator: any = await client.getCreator(args.creator_id);
+          return {
+            status: 'success',
+            code: 'DELETE_PREVIEW',
+            dry_run: true,
+            creator_id: args.creator_id,
+            creator: creator.creator || creator,
+            message:
+              'Dry run only — call again without dry_run to permanently delete this creator',
+          };
+        }
+        return client.deleteCreator(args.creator_id);
+      },
     },
 
     // --- Collections ---
     {
       name: 'adn_list_collections',
       description:
-        'List collections on the authenticated AudioDN organization. Use this to discover existing collections before creating a new one.',
+        'List collections on the authenticated AudioDN organization. Prefer adn_find_resource for name lookup. Optional q filters by title.',
       inputSchema: z.object({
         limit: limitSchema,
         offset: z.number().int().min(0).optional(),
+        q: z.string().optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List collections' },
       handler: (args: any) => client.listCollections(args),
@@ -222,29 +243,38 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_create_collection',
       description:
-        'Create a new collection (a logical container for tracks, like an album, podcast feed, or course module). May also return a collection_cover_upload handle.',
+        'Create a new collection (album, podcast feed, course module). Pass idempotency_key when retrying after a lost response. May return collection_cover_upload — that is not an upload of the cover bytes.',
       inputSchema: z.object({
         title: z.string().min(1),
         creator_id: z.string().uuid().optional(),
         organization_index: z.string().optional(),
         metadata: z.record(z.unknown()).optional(),
+        theme: z.unknown().optional(),
         player_color: hexColor,
         player_subtitle: z.string().optional(),
         is_cover_overridable: z.boolean().optional(),
         is_theme_overridable: z.boolean().optional(),
+        idempotency_key: z.string().min(1).max(128).optional(),
       }),
       annotations: { ...WRITE, title: 'Create collection' },
-      handler: (args: any) => client.createCollection(args),
+      handler: (args: any) => {
+        const { idempotency_key, ...body } = args;
+        return client.createCollection(body, {
+          idempotencyKey: idempotency_key,
+        });
+      },
     },
     {
       name: 'adn_update_collection',
-      description: 'Update an existing collection.',
+      description:
+        'Update an existing collection (title, theme, player fields). Pass creator_id null to clear the creator association.',
       inputSchema: z.object({
         collection_id: z.string().uuid(),
         title: z.string().optional(),
-        creator_id: z.string().uuid().optional(),
+        creator_id: z.string().uuid().nullable().optional(),
         organization_index: z.string().optional(),
         metadata: z.record(z.unknown()).optional(),
+        theme: z.unknown().optional(),
         player_color: hexColor,
         player_subtitle: z.string().optional(),
         is_cover_overridable: z.boolean().optional(),
@@ -260,10 +290,31 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_delete_collection',
       description:
-        'Delete a collection and its tracks. Destructive and irreversible; confirm with the user before calling.',
-      inputSchema: z.object({ collection_id: z.string().uuid() }),
+        'Delete a collection and its tracks. Destructive and irreversible. Pass dry_run=true first to preview the target and track count; confirm with the user before calling without dry_run.',
+      inputSchema: z.object({
+        collection_id: z.string().uuid(),
+        dry_run: z.boolean().optional(),
+      }),
       annotations: { ...DESTRUCTIVE, title: 'Delete collection' },
-      handler: (args: any) => client.deleteCollection(args.collection_id),
+      handler: async (args: any) => {
+        if (args.dry_run) {
+          const collection: any = await client.getCollection(args.collection_id);
+          const tracks: any = await client.listTracks(args.collection_id, {
+            limit: 1,
+          });
+          return {
+            status: 'success',
+            code: 'DELETE_PREVIEW',
+            dry_run: true,
+            collection_id: args.collection_id,
+            collection: collection.collection || collection,
+            track_count: tracks.count ?? null,
+            message:
+              'Dry run only — call again without dry_run to permanently delete this collection and its tracks',
+          };
+        }
+        return client.deleteCollection(args.collection_id);
+      },
     },
     {
       name: 'adn_create_collection_cover',
@@ -277,23 +328,26 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     // --- Tracks ---
     {
       name: 'adn_list_tracks',
-      description: 'List tracks in a collection.',
+      description:
+        'List tracks in a collection. Optional q filters by player_title/file_name. Prefer adn_find_resource for name resolution.',
       inputSchema: z.object({
         collection_id: z.string().uuid(),
         limit: limitSchema,
         offset: z.number().int().min(0).optional(),
+        q: z.string().optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List tracks' },
       handler: (args: any) =>
         client.listTracks(args.collection_id, {
           limit: args.limit,
           offset: args.offset,
+          q: args.q,
         }),
     },
     {
       name: 'adn_get_track',
       description:
-        'Get details about a specific track by ID. Use this to poll processing readiness: a track is playable only when track.track_status_id === "ready". Other terminal statuses (incomplete, error, init_error) indicate a problem; initialized/processing/fallback/fallback_processing are transitional. Do not build playback until a track is ready. Prefer track_status_id over any legacy status alias.',
+        'Get track metadata by ID. For processing readiness prefer adn_get_processing or adn_wait_for_processing. Playable means a successful transcode/original file exists: track_status_id ready is playable; incomplete is also playable but a required output failed; error/init_error are not playable. Optional outputs may still be pending on a ready track.',
       inputSchema: z.object({ track_id: z.string().uuid() }),
       annotations: { ...READ_ONLY, title: 'Get track' },
       handler: (args: any) => client.getTrack(args.track_id),
@@ -301,17 +355,18 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_update_track',
       description:
-        'Update track metadata and player fields (title, subtitle, color, organization_index, metadata, cover/theme override flags).',
+        'Update track metadata and player fields (player_title or title, subtitle, color, organization_index, metadata, cover/theme override flags). Pass creator_id null to clear the creator association.',
       inputSchema: z.object({
         track_id: z.string().uuid(),
         organization_index: z.string().optional(),
         metadata: z.record(z.unknown()).optional(),
+        title: z.string().optional(),
         player_title: z.string().optional(),
         player_subtitle: z.string().optional(),
         player_color: hexColor,
         is_cover_overridable: z.boolean().optional(),
         is_theme_overridable: z.boolean().optional(),
-        creator_id: z.string().uuid().optional(),
+        creator_id: z.string().uuid().nullable().optional(),
       }),
       annotations: { ...WRITE_IDEMPOTENT, title: 'Update track' },
       handler: (args: any) => {
@@ -323,25 +378,55 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_delete_track',
       description:
-        'Soft-delete a single track (and its files/variants). Destructive; confirm with the user before calling.',
-      inputSchema: z.object({ track_id: z.string().uuid() }),
+        'Soft-delete a single track (and its files/variants). Destructive. Pass dry_run=true to preview; confirm with the user before calling without dry_run.',
+      inputSchema: z.object({
+        track_id: z.string().uuid(),
+        dry_run: z.boolean().optional(),
+      }),
       annotations: { ...DESTRUCTIVE, title: 'Delete track' },
-      handler: (args: any) => client.deleteTrack(args.track_id),
+      handler: async (args: any) => {
+        if (args.dry_run) {
+          const track: any = await client.getTrack(args.track_id);
+          return {
+            status: 'success',
+            code: 'DELETE_PREVIEW',
+            dry_run: true,
+            track_id: args.track_id,
+            track: track.track || track,
+            message:
+              'Dry run only — call again without dry_run to soft-delete this track',
+          };
+        }
+        return client.deleteTrack(args.track_id);
+      },
     },
     {
       name: 'adn_create_track',
       description:
-        'Create a track in a collection without an upload session (POST /v1/track). Returns track_id plus track_upload.upload_url (PUT the audio bytes) and an optional track_cover_upload. Prefer the upload-session flow when uploading many files; use this for a one-shot create. collection_id is required unless the API key is already scoped to a collection.',
+        'Create a track resource and issue a signed upload URL. stage is upload_url_issued — this does NOT upload audio bytes. The client must PUT bytes to track_upload.upload_url. Pass idempotency_key when retrying a create after a lost response. Prefer upload-session for many files.',
       inputSchema: z.object({
         collection_id: z.string().uuid().optional(),
         file_name: z.string().min(1),
         creator_id: z.string().uuid().optional(),
         organization_index: z.string().optional(),
         metadata: z.record(z.unknown()).optional(),
+        idempotency_key: z.string().min(1).max(128).optional(),
         ...playerFields,
       }),
       annotations: { ...WRITE, title: 'Create track' },
-      handler: (args: any) => client.createTrack(args),
+      handler: async (args: any) => {
+        const { idempotency_key, ...body } = args;
+        const result: any = await client.createTrack(body, {
+          idempotencyKey: idempotency_key,
+        });
+        return {
+          ...result,
+          status: 'success',
+          stage: result.stage || 'upload_url_issued',
+          message:
+            'Track created and upload URL issued. PUT audio bytes to track_upload.upload_url, then use adn_wait_for_processing.',
+        };
+      },
     },
     {
       name: 'adn_create_track_cover',
@@ -506,6 +591,48 @@ export function createApiTools(client: AdnClient): ToolDef[] {
       inputSchema: createTrackOutputSchema,
       annotations: { ...WRITE, title: 'Create track variant (legacy)' },
       handler: createTrackOutput,
+    },
+
+    // --- Discovery & waiting ---
+    {
+      name: 'adn_find_resource',
+      description:
+        'Resolve a collection, creator, or track by name. Returns an exact match id, needs_input with candidates when ambiguous, or needs_input when nothing matches. Never creates resources and never silently picks among duplicates.',
+      inputSchema: z.object({
+        type: z.enum(['collection', 'creator', 'track']),
+        name: z.string().min(1),
+        collection_id: z.string().uuid().optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Find resource by name' },
+      handler: (args: any) => findResource(client, args),
+    },
+    {
+      name: 'adn_get_processing',
+      description:
+        'Uncached processing snapshot for a track: track_status_id, upload_accepted, playable, and per-output state (pending/ready/failed/not_scheduled). Prefer this over adn_get_track when checking readiness.',
+      inputSchema: z.object({ track_id: z.string().uuid() }),
+      annotations: { ...READ_ONLY, title: 'Get track processing' },
+      handler: (args: any) => client.getTrackProcessing(args.track_id),
+    },
+    {
+      name: 'adn_wait_for_processing',
+      description:
+        'Poll processing for a short bounded wait (default 12s, max 15s). Targets: track_playback (playable ready/incomplete), track_output (requires output_index), track_settled (files_completed_at), cover (requires cloudflare_image_id plus collection_id or track_id). Returns pending with the same ids when the budget expires — processing continues; call again to resume. Does not cancel workers.',
+      inputSchema: z.object({
+        target: z.enum([
+          'track_playback',
+          'track_output',
+          'track_settled',
+          'cover',
+        ]),
+        track_id: z.string().uuid().optional(),
+        collection_id: z.string().uuid().optional(),
+        output_index: z.string().optional(),
+        cloudflare_image_id: z.string().uuid().optional(),
+        timeout_seconds: z.number().int().min(1).max(15).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Wait for processing' },
+      handler: (args: any) => waitForProcessing(client, args),
     },
   ];
 

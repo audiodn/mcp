@@ -39,9 +39,15 @@ Tokens are written to `manual/.env` as `ADN_MCP_ACCESS_TOKEN` (and refresh).
 npm run manual
 ```
 
-Prints OK/ERR for each step: list tools, get org, create collection, create
-track, create track without collection (expect error), get/delete track, delete
-missing UUID, cleanup.
+Prints OK/ERR for each step and exits non-zero if any check fails. Signed
+upload URLs are redacted in the printed output.
+
+Checks: list the reliability tools, get org, create a collection and retry it
+with the same `idempotency_key`, find that title, miss a fake name, create a
+track (`upload_url_issued` only), reject a track with no collection, read
+processing before any PUT, wait for output `hq` and for playback (expect
+`pending`, not a finished file), dry-run then delete the track, dry-run then
+delete the collection.
 
 ## Env
 

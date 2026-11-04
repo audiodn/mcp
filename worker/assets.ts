@@ -14,6 +14,7 @@ import upload from '../assets/guides/upload.md';
 import variantTypes from '../assets/guides/variant-types.md';
 import outputTypes from '../assets/guides/output-types.md';
 import webhooks from '../assets/guides/webhooks.md';
+import workflows from '../assets/guides/workflows.md';
 
 export const version: string = (pkg as { version: string }).version;
 
@@ -27,6 +28,7 @@ const guides: Record<string, string> = {
   'variant-types': variantTypes,
   'output-types': outputTypes,
   webhooks,
+  workflows,
 };
 
 export const store = DocStore.fromData({

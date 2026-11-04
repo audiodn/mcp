@@ -8,6 +8,7 @@ export const GUIDE_TOPICS = [
   'output-types',
   'security',
   'compatibility',
+  'workflows',
 ] as const;
 
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];

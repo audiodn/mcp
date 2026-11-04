@@ -126,8 +126,51 @@ export class AdnClient {
     return this.request('POST', `/v1/api_key`, body);
   }
 
+  /**
+   * Low-level request that can attach extra headers (e.g. Idempotency-Key).
+   */
+  async requestWithHeaders<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.apiKey}`,
+      Accept: 'application/json',
+      ...(extraHeaders || {}),
+    };
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      let parsed: any = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = { ok: false, message: text || 'Non-JSON response' };
+      }
+      if (!res.ok || (parsed && parsed.ok === false)) {
+        throw makeError(parsed, method, path, res.status, this.apiKey);
+      }
+      return parsed as T;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   // --- Creators ---
-  listCreators(params?: { limit?: number; offset?: number }) {
+  listCreators(params?: { limit?: number; offset?: number; q?: string }) {
     return this.request('GET', `/v1/creator${listQuery(params)}`);
   }
 
@@ -151,7 +194,7 @@ export class AdnClient {
   }
 
   // --- Collections ---
-  listCollections(params?: { limit?: number; offset?: number }) {
+  listCollections(params?: { limit?: number; offset?: number; q?: string }) {
     return this.request('GET', `/v1/collection${listQuery(params)}`);
   }
 
@@ -159,16 +202,25 @@ export class AdnClient {
     return this.request('GET', `/v1/collection/${collectionId}`);
   }
 
-  createCollection(body: {
-    title: string;
-    creator_id?: string;
-    organization_index?: string;
-    metadata?: Record<string, unknown>;
-    player_color?: string;
-    player_subtitle?: string;
-    is_cover_overridable?: boolean;
-    is_theme_overridable?: boolean;
-  }) {
+  createCollection(
+    body: {
+      title: string;
+      creator_id?: string;
+      organization_index?: string;
+      metadata?: Record<string, unknown>;
+      theme?: unknown;
+      player_color?: string;
+      player_subtitle?: string;
+      is_cover_overridable?: boolean;
+      is_theme_overridable?: boolean;
+    },
+    opts?: { idempotencyKey?: string },
+  ) {
+    if (opts?.idempotencyKey) {
+      return this.requestWithHeaders('POST', `/v1/collection`, body, {
+        'Idempotency-Key': opts.idempotencyKey,
+      });
+    }
     return this.request('POST', `/v1/collection`, body);
   }
 
@@ -187,7 +239,7 @@ export class AdnClient {
   // --- Tracks ---
   listTracks(
     collectionId: string,
-    params?: { limit?: number; offset?: number },
+    params?: { limit?: number; offset?: number; q?: string },
   ) {
     return this.request(
       'GET',
@@ -199,6 +251,26 @@ export class AdnClient {
     return this.request('GET', `/v1/track/${trackId}`);
   }
 
+  getTrackProcessing(trackId: string) {
+    return this.request('GET', `/v1/track/${trackId}/processing`);
+  }
+
+  getTrackCoverStatus(trackId: string, cloudflareImageId: string) {
+    const q = new URLSearchParams({ cloudflare_image_id: cloudflareImageId });
+    return this.request(
+      'GET',
+      `/v1/track/${trackId}/cover_status?${q.toString()}`,
+    );
+  }
+
+  getCollectionCoverStatus(collectionId: string, cloudflareImageId: string) {
+    const q = new URLSearchParams({ cloudflare_image_id: cloudflareImageId });
+    return this.request(
+      'GET',
+      `/v1/collection/${collectionId}/cover_status?${q.toString()}`,
+    );
+  }
+
   updateTrack(trackId: string, body: Record<string, unknown>) {
     return this.request('PUT', `/v1/track/${trackId}`, body);
   }
@@ -207,18 +279,26 @@ export class AdnClient {
     return this.request('DELETE', `/v1/track/${trackId}`);
   }
 
-  createTrack(body: {
-    file_name: string;
-    collection_id?: string;
-    creator_id?: string;
-    organization_index?: string;
-    metadata?: Record<string, unknown>;
-    player_title?: string;
-    player_subtitle?: string;
-    player_color?: string;
-    is_cover_overridable?: boolean;
-    is_theme_overridable?: boolean;
-  }) {
+  createTrack(
+    body: {
+      file_name: string;
+      collection_id?: string;
+      creator_id?: string;
+      organization_index?: string;
+      metadata?: Record<string, unknown>;
+      player_title?: string;
+      player_subtitle?: string;
+      player_color?: string;
+      is_cover_overridable?: boolean;
+      is_theme_overridable?: boolean;
+    },
+    opts?: { idempotencyKey?: string },
+  ) {
+    if (opts?.idempotencyKey) {
+      return this.requestWithHeaders('POST', `/v1/track`, body, {
+        'Idempotency-Key': opts.idempotencyKey,
+      });
+    }
     return this.request('POST', `/v1/track`, body);
   }
 
@@ -308,10 +388,15 @@ export class AdnClient {
   }
 }
 
-function listQuery(params?: { limit?: number; offset?: number }): string {
+function listQuery(params?: {
+  limit?: number;
+  offset?: number;
+  q?: string;
+}): string {
   const q = new URLSearchParams();
   if (params?.limit !== undefined) q.set('limit', String(params.limit));
   if (params?.offset !== undefined) q.set('offset', String(params.offset));
+  if (params?.q !== undefined && params.q !== '') q.set('q', String(params.q));
   const s = q.toString();
   return s ? `?${s}` : '';
 }

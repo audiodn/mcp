@@ -71,6 +71,9 @@ describe('server registry', () => {
     expect(names).toContain('adn_list_variants');
     expect(names).toContain('adn_get_play_download');
     expect(names).toContain('adn_list_output_types');
+    expect(names).toContain('adn_find_resource');
+    expect(names).toContain('adn_get_processing');
+    expect(names).toContain('adn_wait_for_processing');
   });
 
   it('exposes only knowledge tools when no API client is configured', async () => {

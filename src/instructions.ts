@@ -2,10 +2,10 @@
  * Server-level instructions advertised to MCP clients on initialize.
  * Keep this short: hosts inject it into the model context.
  */
-export const SERVER_INSTRUCTIONS = `AudioDN MCP server. Use knowledge tools (adn_get_guide, adn_search_docs, adn_list_operations) before inventing API shapes.
+export const SERVER_INSTRUCTIONS = `AudioDN MCP server. Use knowledge tools (adn_get_guide, adn_search_docs, adn_list_operations) before inventing API shapes. Read the workflows guide for end-to-end patterns.
 
-Upload is two steps: adn_create_upload_session, then adn_create_track_in_upload_session once per file (or pass nested track on session create). Alternatively use adn_create_track for a one-shot track + upload URL. PUT bytes to track_upload.upload_url yourself. Persist durable IDs only (collection_id, track_id, output index / base_url) — never store upload_url, session IDs, or signed URLs.
+Resolve names with adn_find_resource before creating. Creating a track only issues an upload URL (stage upload_url_issued) — PUT audio bytes yourself. Pass idempotency_key when retrying a create after a lost response. Persist durable IDs only (collection_id, track_id, output index, cloudflare_image_id) — never store upload_url, session IDs, or signed URLs.
 
-Poll adn_get_track until track.track_status_id === "ready" before playback. Play sessions require a non-empty variants list of output indexes from adn_list_output_presets (variants is the historical wire field). Pass play_session_id to the ADN Player; use signed URLs only with a custom player.
+Use adn_get_processing or adn_wait_for_processing for readiness (prefer those over polling adn_get_track alone). track_playback waits for a playable file when track_status_id is ready or incomplete. Wait for a specific output_index when you need a waveform/preview file. A ready track may still have optional outputs pending. Pending means call wait again with the same ids; it does not cancel workers.
 
-Do not claim LUFS/loudness normalization. Destructive delete tools (adn_delete_*) are available when authenticated — confirm with the user before calling them.`;
+Play sessions need a non-empty variants list of output indexes (historical wire field). Destructive deletes support dry_run=true — confirm with the user before a real delete. Do not claim LUFS/loudness normalization.`;
