@@ -40,7 +40,7 @@ describe.skipIf(!built)('stdio smoke (built binary)', () => {
 
     const res: any = await client.callTool({ name: 'adn_about', arguments: {} });
     const about = JSON.parse(res.content[0].text);
-    expect(about.openapiVersion).toBe('1.0.0');
+    expect(about.openapiVersion).toBe('1.3.0');
     expect(about.docsSource).toBe('bundled snapshot');
   }, 20_000);
 });

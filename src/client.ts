@@ -386,6 +386,49 @@ export class AdnClient {
   getVariant(variantId: string) {
     return this.request('GET', `/v1/output_preset/${variantId}`);
   }
+
+  // --- Usage & reporting (read-only; JSON only, never CSV over MCP) ---
+  getUsage(params?: {
+    from?: string;
+    to?: string;
+    interval?: 'day' | 'month';
+  }) {
+    return this.request('GET', `/v1/usage${usageQuery(params)}`);
+  }
+
+  getUploadStats(params?: {
+    from?: string;
+    to?: string;
+    group_by?: 'collection' | 'day' | 'creator';
+  }) {
+    return this.request('GET', `/v1/usage/uploads${usageQuery(params)}`);
+  }
+
+  getAiSpend(params?: {
+    from?: string;
+    to?: string;
+    group_by?: 'none' | 'day' | 'track' | 'collection';
+  }) {
+    return this.request('GET', `/v1/usage/ai${usageQuery(params)}`);
+  }
+
+  getPlays(params?: {
+    from?: string;
+    to?: string;
+    group_by?: 'none' | 'day' | 'collection' | 'track' | 'creator';
+    interval?: 'day' | 'month';
+  }) {
+    return this.request('GET', `/v1/usage/plays${usageQuery(params)}`);
+  }
+
+  getDelivery(params?: {
+    from?: string;
+    to?: string;
+    group_by?: 'none' | 'day' | 'output' | 'collection' | 'track' | 'creator';
+    interval?: 'day' | 'month';
+  }) {
+    return this.request('GET', `/v1/usage/delivery${usageQuery(params)}`);
+  }
 }
 
 function listQuery(params?: {
@@ -397,6 +440,15 @@ function listQuery(params?: {
   if (params?.limit !== undefined) q.set('limit', String(params.limit));
   if (params?.offset !== undefined) q.set('offset', String(params.offset));
   if (params?.q !== undefined && params.q !== '') q.set('q', String(params.q));
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+function usageQuery(params?: Record<string, string | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params ?? {})) {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  }
   const s = q.toString();
   return s ? `?${s}` : '';
 }

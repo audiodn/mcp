@@ -17,6 +17,11 @@ const hexColor = z
   .regex(/^#[0-9A-Fa-f]{6}$/)
   .optional();
 const expiresIn = z.number().int().min(60).max(86400).optional();
+const usageDate = z
+  .string()
+  .min(4)
+  .optional()
+  .describe('ISO date or datetime, e.g. "2026-11-01" or "2026-11-01T00:00:00Z".');
 
 const playerFields = {
   player_title: z.string().optional(),
@@ -97,7 +102,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_update_organization',
       description:
-        'Update organization player/theme fields (name, player_color, player_subtitle, cover/theme override flags). organization_id is optional and derived from the API key when omitted.',
+        'Update organization player/theme fields (name, player_color, player_subtitle, cover/theme override flags, default_collection_id). organization_id is optional and derived from the API key when omitted. Pass default_collection_id to set which collection is used when create-track omits collection_id.',
       inputSchema: z.object({
         organization_id: z.string().uuid().optional(),
         name: z.string().optional(),
@@ -105,6 +110,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
         player_subtitle: z.string().optional(),
         is_cover_overridable: z.boolean().optional(),
         is_theme_overridable: z.boolean().optional(),
+        default_collection_id: z.string().uuid().nullable().optional(),
       }),
       annotations: { ...WRITE_IDEMPOTENT, title: 'Update organization' },
       handler: (args: any) => {
@@ -403,9 +409,11 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_create_track',
       description:
-        'Create a track resource and issue a signed upload URL. stage is upload_url_issued — this does NOT upload audio bytes. The client must PUT bytes to track_upload.upload_url. Pass idempotency_key when retrying a create after a lost response. Prefer upload-session for many files.',
+        'Create a track resource and issue a signed upload URL. stage is upload_url_issued — this does NOT upload audio bytes. The client must PUT bytes to track_upload.upload_url. Pass idempotency_key when retrying a create after a lost response. Prefer upload-session for many files. When collection_id is omitted, the organization default collection is used (API sentinel "default").',
       inputSchema: z.object({
-        collection_id: z.string().uuid().optional(),
+        collection_id: z
+          .union([z.string().uuid(), z.literal('default')])
+          .optional(),
         file_name: z.string().min(1),
         creator_id: z.string().uuid().optional(),
         organization_index: z.string().optional(),
@@ -416,6 +424,9 @@ export function createApiTools(client: AdnClient): ToolDef[] {
       annotations: { ...WRITE, title: 'Create track' },
       handler: async (args: any) => {
         const { idempotency_key, ...body } = args;
+        if (!body.collection_id) {
+          body.collection_id = 'default';
+        }
         const result: any = await client.createTrack(body, {
           idempotencyKey: idempotency_key,
         });
@@ -441,9 +452,11 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_create_upload_session',
       description:
-        'Create an upload session for a collection. Returns an upload_session_id used to register tracks. By default this does NOT return an upload URL — call adn_create_track_in_upload_session next (one call per file). Optionally pass a nested track object (with file_name) to also create that first track and receive track_upload.upload_url on this response.',
+        'Create an upload session for a collection. Returns an upload_session_id used to register tracks. By default this does NOT return an upload URL — call adn_create_track_in_upload_session next (one call per file). Optionally pass a nested track object (with file_name) to also create that first track and receive track_upload.upload_url on this response. When collection_id is omitted, the organization default collection is used (API sentinel "default").',
       inputSchema: z.object({
-        collection_id: z.string().uuid(),
+        collection_id: z
+          .union([z.string().uuid(), z.literal('default')])
+          .optional(),
         creator_id: z.string().uuid().optional(),
         organization_index: z.string().optional(),
         metadata: z.record(z.unknown()).optional(),
@@ -451,7 +464,13 @@ export function createApiTools(client: AdnClient): ToolDef[] {
         track: nestedUploadTrack.optional(),
       }),
       annotations: { ...WRITE, title: 'Create upload session' },
-      handler: (args: any) => client.createUploadSession(args),
+      handler: (args: any) => {
+        const body = { ...args };
+        if (!body.collection_id) {
+          body.collection_id = 'default';
+        }
+        return client.createUploadSession(body);
+      },
     },
     {
       name: 'adn_get_upload_session',
@@ -593,6 +612,72 @@ export function createApiTools(client: AdnClient): ToolDef[] {
       handler: createTrackOutput,
     },
 
+    // --- Usage & reporting ---
+    {
+      name: 'adn_get_usage',
+      description:
+        'Organization usage and cost over time (GET /v1/usage). Returns summary totals plus a day- or month-bucketed series of plays (R2 GET deliveries, aggregated per organization — not per-track or per-output-preset), stored outputs, jobs, process_time, storage, and cost. Requires a full API Access key. from/to are ISO dates; default range is the start of the current month to now.',
+      inputSchema: z.object({
+        from: usageDate,
+        to: usageDate,
+        interval: z.enum(['day', 'month']).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get usage & cost' },
+      handler: (args: any) => client.getUsage(args),
+    },
+    {
+      name: 'adn_get_upload_stats',
+      description:
+        'Upload activity counts (GET /v1/usage/uploads): number of tracks created in a range, grouped by collection (default), day, or creator. Requires a full API Access key. Answers questions like "how many uploads this week, broken down by collection" or per creator.',
+      inputSchema: z.object({
+        from: usageDate,
+        to: usageDate,
+        group_by: z.enum(['collection', 'day', 'creator']).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get upload stats' },
+      handler: (args: any) => client.getUploadStats(args),
+    },
+    {
+      name: 'adn_get_ai_spend',
+      description:
+        'AI (transcription) credit spend (GET /v1/usage/ai) over a range, optionally grouped by day, track, or collection. spend_units are ledger units (1 unit = $0.0001 USD); spend_usd is the formatted amount. Requires a full API Access key.',
+      inputSchema: z.object({
+        from: usageDate,
+        to: usageDate,
+        group_by: z.enum(['none', 'day', 'track', 'collection']).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get AI spend' },
+      handler: (args: any) => client.getAiSpend(args),
+    },
+    {
+      name: 'adn_get_plays',
+      description:
+        'Play-session counts (GET /v1/usage/plays) over a range, grouped by collection (default), track, creator, or day; use group_by=none for a total plus a day/month time series. Play sessions are the primary play metric (one per playback open). Answers "how many plays this week, broken down by collection/creator". Note: plays from directly signed (HMAC) URLs are not counted, and there is no per-output-preset breakdown (R2 operations are aggregated per organization). Requires a full API Access key.',
+      inputSchema: z.object({
+        from: usageDate,
+        to: usageDate,
+        group_by: z.enum(['none', 'day', 'collection', 'track', 'creator']).optional(),
+        interval: z.enum(['day', 'month']).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get plays' },
+      handler: (args: any) => client.getPlays(args),
+    },
+    {
+      name: 'adn_get_delivery',
+      description:
+        'Per-file delivery activity (GET /v1/usage/delivery) over a range. Default group_by=output answers "how many preview/demo plays vs real track plays" (output_index values like preview vs hq/lq). Also groups by collection, track, creator, or day; group_by=none returns a summary plus a day/month time series. Returns requests, bytes, cache hit/miss split (requests_cached / requests_uncached), rejected signed URLs (requests_failed), and origin delivery cost (requests_uncached × cost_plays/1000). Counts are edge delivery activity (adaptive-sampled, inflated by audio range requests) — not a literal play count; use adn_get_plays for play sessions. Default delivery zone only. Requires a full API Access key.',
+      inputSchema: z.object({
+        from: usageDate,
+        to: usageDate,
+        group_by: z
+          .enum(['none', 'day', 'output', 'collection', 'track', 'creator'])
+          .optional(),
+        interval: z.enum(['day', 'month']).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get delivery activity' },
+      handler: (args: any) => client.getDelivery(args),
+    },
+
     // --- Discovery & waiting ---
     {
       name: 'adn_find_resource',
@@ -685,6 +770,7 @@ export const OPERATION_TOOL_MAP: Record<string, string | null> = {
   createCollectionCover: 'adn_create_collection_cover',
   createTrack: 'adn_create_track',
   getTrack: 'adn_get_track',
+  getTrackProcessing: 'adn_get_processing',
   updateTrack: 'adn_update_track',
   deleteTrack: 'adn_delete_track',
   createTrackCover: 'adn_create_track_cover',
@@ -701,6 +787,11 @@ export const OPERATION_TOOL_MAP: Record<string, string | null> = {
   getVariant: 'adn_get_variant',
   listOutputPresets: 'adn_list_output_presets',
   getOutputPreset: 'adn_get_output_preset',
+  getUsage: 'adn_get_usage',
+  getUploadStats: 'adn_get_upload_stats',
+  getAiSpend: 'adn_get_ai_spend',
+  getPlays: 'adn_get_plays',
+  getDelivery: 'adn_get_delivery',
   // 302 redirect with share key in the path — not a useful MCP tool.
   getStreamRedirect: null,
 };

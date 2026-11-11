@@ -10,14 +10,14 @@ const byName = new Map(tools.map((t) => [t.name, t]));
 describe('DocStore (offline)', () => {
   it('reports version and bundled openapi version', () => {
     const about = store.about();
-    expect(about.openapiVersion).toBe('1.0.0');
+    expect(about.openapiVersion).toBe('1.3.0');
     expect(about.docsSource).toBe('bundled snapshot');
     expect(about.apiBase).toContain('api.audiodelivery.net');
   });
 
   it('lists all canonical operations with operationIds', () => {
     const ops = store.listOperations();
-    expect(ops.length).toBe(34);
+    expect(ops.length).toBe(40);
     expect(ops.every((o) => o.operationId && o.method && o.path)).toBe(true);
     expect(ops.some((o) => o.path === '/v1/stream/{track_id}/{api_key}')).toBe(true);
     expect(ops.some((o) => o.path === '/v1/output_preset')).toBe(true);
