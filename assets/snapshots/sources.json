@@ -4,14 +4,14 @@
   "sources": [
     {
       "name": "openapi.json",
-      "url": "file://../audiodn-mono/www/public/openapi.json",
-      "fetchedAt": "2026-11-11",
+      "url": "https://audiodeliverynetwork.com/openapi.json",
+      "fetchedAt": "2026-11-16",
       "sha256": "571f6ddd690495c223729eb7b581013e47a08777081e2daa0c4f6976b6ae391f"
     },
     {
       "name": "llms-full.txt",
-      "url": "file://../audiodn-mono/www/public/llms-full.txt",
-      "fetchedAt": "2026-11-11",
+      "url": "https://audiodeliverynetwork.com/llms-full.txt",
+      "fetchedAt": "2026-11-16",
       "sha256": "8aef9a888e802dd9034b51ca9231e20a9d5e33454a489bd63f3039e74a49a13b"
     }
   ]
