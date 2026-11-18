@@ -5,10 +5,12 @@ AudioDN uses these credential types:
 - **API Access key** (`Bearer` token): full server-side access. Server-only.
   Used to create upload sessions, read track status, mint play sessions, and
   create scoped keys. Local stdio MCP (`npx @audiodn/mcp`) uses this via
-  `ADN_API_KEY`. Hosted MCP preferably uses **OAuth account login** instead
-  (see below); a legacy API Access key as Bearer still works. API Access keys
-  are created in the dashboard (or automatically titled `MCP · …` when you
-  approve a hosted MCP connection). The first 22 characters of the key are a
+  `ADN_API_KEY`. Hosted MCP uses **OAuth account login** instead (see below) —
+  pasted API Access keys are rejected on the hosted URL. API Access keys are
+  created in the dashboard (or automatically titled `MCP · …` when you approve
+  a hosted MCP connection). List metadata with `adn_list_api_keys`; disconnect
+  with `adn_revoke_api_key` (or delete the key in Settings). URL Signing keys
+  cannot be revoked via the API. The first 22 characters of the key are a
   short-uuid encoding of `organization_id` (`adn_get_organization` derives it
   when omitted).
 - **MCP OAuth (hosted)**: remote MCP clients follow the MCP authorization
@@ -17,7 +19,8 @@ AudioDN uses these credential types:
   selected organization. The MCP worker stores that key encrypted and issues
   short-lived access tokens audience-bound to
   `https://mcp.audiodelivery.net/mcp`. OAuth tokens are never forwarded to the
-  AudioDN REST API.
+  AudioDN REST API. Knowledge tools and `adn_build_player_embed` work without
+  sign-in; live API tools return 401 so the client starts OAuth.
 - **Client-Side keys** (`player` / `uploader`): resource-scoped keys that are
   safe to ship in a browser or app. They work with the web components **and**
   with custom clients that call the session routes directly

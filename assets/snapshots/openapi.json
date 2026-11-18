@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AudioDN API",
-    "version": "1.3.0",
+    "version": "1.5.0",
     "summary": "Audio delivery infrastructure: upload, transcode, secure delivery, and playback.",
     "description": "AudioDN provides a REST API and embeddable web components for managing and delivering audio at scale.\n\nAuthentication: bearer token via the `Authorization` header. Use a server-side API key for full access; mint scoped client-side keys (Player or Uploader) for browsers and mobile apps.\n\nAll endpoints are prefixed with `/v1/`.",
     "contact": {
@@ -58,6 +58,15 @@
     {
       "name": "Usage",
       "description": "Read-only usage, cost, and reporting over data already computed by AudioDN (hourly stats rollups, play sessions, per-file delivery, and the AI-credit ledger). Requires a full API Access key. JSON only."
+    },
+    {
+      "name": "Billing"
+    },
+    {
+      "name": "AI Credits"
+    },
+    {
+      "name": "Trial"
     }
   ],
   "security": [
@@ -218,7 +227,83 @@
             "type": "string",
             "format": "uuid",
             "nullable": true,
-            "description": "Collection used when callers pass collection_id \"default\". Null when unset."
+            "description": "Collection used when callers pass collection_id \"default\" or omit collection_id on create/list. Null when unset."
+          }
+        }
+      },
+      "WebhookConfig": {
+        "type": "object",
+        "properties": {
+          "webhook_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Track Processing webhook URL (https). Empty string clears."
+          },
+          "webhook_url_collection": {
+            "type": "string",
+            "nullable": true,
+            "description": "Collection Sync webhook URL (https). Empty string clears."
+          },
+          "webhook_url_file": {
+            "type": "string",
+            "nullable": true,
+            "description": "Track File / Output webhook URL (https). Empty string clears."
+          }
+        }
+      },
+      "WebhookTestRequest": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "track",
+              "collection",
+              "file"
+            ],
+            "default": "track",
+            "description": "Which configured URL column to target when url is omitted."
+          },
+          "url": {
+            "type": "string",
+            "description": "Optional override target URL (https). When omitted, uses the configured URL for channel."
+          },
+          "event": {
+            "type": "string",
+            "description": "Optional X-ADN-Event override. Defaults: track.status_changed, collection.updated, track_file.created."
+          }
+        }
+      },
+      "WebhookTestResult": {
+        "type": "object",
+        "properties": {
+          "delivered": {
+            "type": "boolean",
+            "description": "True when the outbound fetch completed (any HTTP status)."
+          },
+          "status": {
+            "type": "string",
+            "description": "HTTP status code as a string, or \"failed\" on network/timeout error."
+          },
+          "response_snippet": {
+            "type": "string",
+            "nullable": true,
+            "description": "First 2000 characters of the response body (or error message)."
+          },
+          "event": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "track",
+              "collection",
+              "file"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "description": "The URL that was POSTed to."
           }
         }
       },
@@ -575,6 +660,53 @@
             "type": "integer"
           }
         }
+      },
+      "ApiKeyMetadata": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "api_key_type_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "collection_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "track_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       }
     },
     "responses": {
@@ -709,6 +841,60 @@
             "description": "Forbidden — API Access keys must be created in the dashboard, or the caller key is not an API Access key"
           }
         }
+      },
+      "get": {
+        "tags": [
+          "API Keys"
+        ],
+        "operationId": "listApiKeys",
+        "summary": "List API keys",
+        "description": "List API keys for the organization. Returns metadata only — never key material. Requires an API Access key.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API key metadata list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/OkEnvelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "count": {
+                          "type": "integer"
+                        },
+                        "api_keys": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ApiKeyMetadata"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
       }
     },
     "/v1/organization/{organization_id}": {
@@ -826,6 +1012,202 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/organization/{organization_id}/webhooks": {
+      "get": {
+        "tags": [
+          "Organizations"
+        ],
+        "operationId": "getOrganizationWebhooks",
+        "summary": "Get organization webhook URLs",
+        "description": "Returns the three webhook URL columns for the organization. Requires a full API Access key.",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/OkEnvelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "organization_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "webhooks": {
+                          "$ref": "#/components/schemas/WebhookConfig"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Organizations"
+        ],
+        "operationId": "updateOrganizationWebhooks",
+        "summary": "Set or clear organization webhook URLs",
+        "description": "Update one or more webhook URL columns. Empty string clears a URL; omitted fields are left unchanged. Requires a full API Access key. URLs must be https and cannot target private/loopback hosts.",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated webhook configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/OkEnvelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "organization_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "webhooks": {
+                          "$ref": "#/components/schemas/WebhookConfig"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/organization/{organization_id}/webhooks/test": {
+      "post": {
+        "tags": [
+          "Organizations"
+        ],
+        "operationId": "testOrganizationWebhook",
+        "summary": "Test-deliver a sample webhook event",
+        "description": "Synchronously POSTs a synthetic sample payload (marked test: true) with an X-ADN-Event header to a configured or supplied https URL and returns the HTTP status plus a response snippet. Requires a full API Access key. Does not write to the delivery log.",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Test delivery result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/OkEnvelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "organization_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "delivered": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "response_snippet": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "event": {
+                          "type": "string"
+                        },
+                        "channel": {
+                          "type": "string"
+                        },
+                        "target": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -1450,15 +1832,35 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "oneOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "default"
+                  ]
+                }
+              ]
+            },
+            "description": "Collection UUID, or the literal string \"default\" for the organization default collection."
           },
           {
             "$ref": "#/components/parameters/Limit"
           },
           {
             "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional name filter (player_title / file_name)."
           }
         ],
         "responses": {
@@ -1570,7 +1972,6 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "collection_id",
                   "file_name"
                 ],
                 "properties": {
@@ -1587,7 +1988,7 @@
                         ]
                       }
                     ],
-                    "description": "Required unless the API key is scoped to a collection. Pass the literal string \"default\" to use the organization's default collection."
+                    "description": "Collection UUID, or \"default\" for the organization default. When omitted, the API resolves the organization default collection."
                   },
                   "creator_id": {
                     "type": "string",
@@ -2203,9 +2604,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "collection_id"
-                ],
+                "required": [],
                 "properties": {
                   "collection_id": {
                     "oneOf": [
@@ -2220,7 +2619,7 @@
                         ]
                       }
                     ],
-                    "description": "Required unless the API key is scoped to a collection. Pass the literal string \"default\" to use the organization's default collection."
+                    "description": "Collection UUID, or \"default\" for the organization default. When omitted, the API resolves the organization default collection."
                   },
                   "creator_id": {
                     "type": "string",
@@ -3091,6 +3490,91 @@
             "$ref": "#/components/responses/Unauthorized"
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Output Presets"
+        ],
+        "operationId": "createOutputPreset",
+        "summary": "Create organization output preset",
+        "description": "Create an org-level output preset (track_id null). Free-form creates are limited to transcode and preview.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "index"
+                ],
+                "properties": {
+                  "output_type_id": {
+                    "type": "string",
+                    "enum": [
+                      "transcode",
+                      "preview"
+                    ]
+                  },
+                  "variant_type_id": {
+                    "type": "string",
+                    "enum": [
+                      "transcode",
+                      "preview"
+                    ]
+                  },
+                  "index": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 64
+                  },
+                  "is_required": {
+                    "type": "boolean"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "codec": {
+                    "type": "string",
+                    "enum": [
+                      "aac",
+                      "mp3",
+                      "ogg",
+                      "opus"
+                    ]
+                  },
+                  "bitrate": {
+                    "type": "integer"
+                  },
+                  "is_stereo": {
+                    "type": "boolean"
+                  },
+                  "is_strip_tags": {
+                    "type": "boolean"
+                  },
+                  "is_strip_cover": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Output preset created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Index already exists."
+          }
+        }
       }
     },
     "/v1/output_preset/{output_preset_id}": {
@@ -3141,6 +3625,101 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Output Presets"
+        ],
+        "operationId": "updateOutputPreset",
+        "summary": "Update output preset (limited)",
+        "description": "Update notes, is_required, and is_require_lossless_source only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "output_preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "notes": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "is_required": {
+                    "type": "boolean"
+                  },
+                  "is_require_lossless_source": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated output preset."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Output Presets"
+        ],
+        "operationId": "deleteOutputPreset",
+        "summary": "Delete output preset",
+        "description": "Soft-delete an output preset. Refuses original and cover.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "output_preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Soft-deleted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Protected preset type."
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -4081,6 +4660,565 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/api_key/{api_key_id}": {
+      "delete": {
+        "tags": [
+          "API Keys"
+        ],
+        "operationId": "deleteApiKey",
+        "summary": "Revoke API key",
+        "description": "Soft-delete an API key. URL Signing keys are refused (dashboard only). Requires an API Access key.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "api_key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Key revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/OkEnvelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "api_key_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "api_key": {
+                          "$ref": "#/components/schemas/ApiKeyMetadata"
+                        },
+                        "revoked_current": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Signing keys must be deleted in the dashboard."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/collection/{collection_id}/cover_status": {
+      "get": {
+        "tags": [
+          "Cover Images"
+        ],
+        "operationId": "getCollectionCoverStatus",
+        "summary": "Get collection cover status",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cloudflare_image_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cover colour extraction status."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/track/{track_id}/cover_status": {
+      "get": {
+        "tags": [
+          "Cover Images"
+        ],
+        "operationId": "getTrackCoverStatus",
+        "summary": "Get track cover status",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cloudflare_image_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cover colour extraction status."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/output_preset/apply_category": {
+      "post": {
+        "tags": [
+          "Output Presets"
+        ],
+        "operationId": "applyOutputPresetCategory",
+        "summary": "Apply recommended output preset category",
+        "description": "Seed recommended org presets for a use-case category. Duplicate indexes are skipped.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "category_id"
+                ],
+                "properties": {
+                  "category_id": {
+                    "type": "string",
+                    "enum": [
+                      "podcasting",
+                      "music",
+                      "ecommerce",
+                      "audiobooks",
+                      "voice_messages",
+                      "video",
+                      "general"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created and skipped presets."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/plan": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "listPlans",
+        "summary": "List plans",
+        "description": "Public list of active plans and prices.",
+        "responses": {
+          "200": {
+            "description": "Plans list."
+          }
+        }
+      }
+    },
+    "/v1/subscription": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "getSubscription",
+        "summary": "Get subscription",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription details."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/subscription/checkout": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "createSubscriptionCheckout",
+        "summary": "Create subscription checkout",
+        "description": "Returns checkout_url for Stripe Checkout.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "success_url",
+                  "cancel_url"
+                ],
+                "properties": {
+                  "plan_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "plan_price_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "success_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "cancel_url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout URL."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/subscription/portal": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "createSubscriptionPortal",
+        "summary": "Create billing portal session",
+        "description": "Returns portal_url for Stripe Customer Portal.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "return_url"
+                ],
+                "properties": {
+                  "return_url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Portal URL."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/transaction": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "listTransactions",
+        "summary": "List transactions",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transactions list."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/ai_credits": {
+      "get": {
+        "tags": [
+          "AI Credits"
+        ],
+        "operationId": "getAiCredits",
+        "summary": "Get AI credit wallet",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credit summary."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/ai_credits/activity": {
+      "get": {
+        "tags": [
+          "AI Credits"
+        ],
+        "operationId": "getAiCreditActivity",
+        "summary": "Get AI credit activity",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ledger rows."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/ai_credits/rates": {
+      "get": {
+        "tags": [
+          "AI Credits"
+        ],
+        "operationId": "getAiCreditRates",
+        "summary": "Get AI credit rates",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Service rates."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/ai_credits/topup": {
+      "post": {
+        "tags": [
+          "AI Credits"
+        ],
+        "operationId": "createAiCreditsTopup",
+        "summary": "Top up AI credits",
+        "description": "Returns a Stripe Checkout URL to purchase credits.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "amount_cents",
+                  "success_url",
+                  "cancel_url"
+                ],
+                "properties": {
+                  "amount_cents": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "success_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "cancel_url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout URL."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/trial/upload_session": {
+      "post": {
+        "tags": [
+          "Trial"
+        ],
+        "operationId": "createTrialUploadSession",
+        "summary": "Create trial upload session",
+        "description": "Pre-organization trial bootstrap. Prefer OAuth onboarding for MCP.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trial upload session."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/trial/track/{track_id}": {
+      "post": {
+        "tags": [
+          "Trial"
+        ],
+        "operationId": "claimTrialTrack",
+        "summary": "Claim trial track",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Claimed."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/stripe/webhook": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "handleStripeWebhook",
+        "summary": "Stripe webhook",
+        "description": "Inbound Stripe webhook (signature-verified). Not an agent tool.",
+        "responses": {
+          "200": {
+            "description": "Acknowledged."
           }
         }
       }

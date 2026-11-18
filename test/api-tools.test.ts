@@ -237,4 +237,76 @@ describe('api tool handlers (mocked fetch)', () => {
     ).toThrow(/exactly one variant/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('derives org id for webhook tools and rejects empty set bodies', async () => {
+    const orgId = '22222222-2222-4222-8222-222222222222';
+    const apiKey = formatApiKeyForTests(orgId, 'y'.repeat(32));
+    const fetchMock = vi.fn().mockImplementation(() =>
+      jsonResponse({
+        ok: true,
+        organization_id: orgId,
+        webhooks: { webhook_url: null, webhook_url_collection: null, webhook_url_file: null },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { byName } = toolsByName(apiKey);
+
+    await byName.get('adn_get_webhooks')!.handler({});
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `https://api.audiodelivery.net/v1/organization/${orgId}/webhooks`,
+    );
+
+    expect(() => byName.get('adn_set_webhooks')!.handler({})).toThrow(
+      /at least one field/,
+    );
+
+    await byName.get('adn_set_webhooks')!.handler({
+      webhook_url: '',
+      webhook_url_file: 'https://hooks.example.com/file',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      webhook_url: '',
+      webhook_url_file: 'https://hooks.example.com/file',
+    });
+  });
+
+  it('rejects non-https webhook URLs at the schema layer', () => {
+    const { byName } = toolsByName();
+    const parsed = byName.get('adn_set_webhooks')!.inputSchema.safeParse({
+      webhook_url: 'http://hooks.example.com/track',
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('passes through test-webhook delivery results', async () => {
+    const orgId = '33333333-3333-4333-8333-333333333333';
+    const apiKey = formatApiKeyForTests(orgId, 'z'.repeat(32));
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ok: true,
+        delivered: true,
+        status: '200',
+        response_snippet: 'ok',
+        event: 'track.status_changed',
+        channel: 'track',
+        target: 'https://hooks.example.com/track',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { byName } = toolsByName(apiKey);
+
+    const result: any = await byName.get('adn_test_webhook')!.handler({
+      channel: 'track',
+      url: 'https://hooks.example.com/track',
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `https://api.audiodelivery.net/v1/organization/${orgId}/webhooks/test`,
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      channel: 'track',
+      url: 'https://hooks.example.com/track',
+    });
+    expect(result.delivered).toBe(true);
+    expect(result.status).toBe('200');
+  });
 });

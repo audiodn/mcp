@@ -255,10 +255,18 @@ describe('findResource', () => {
     expect(result.candidates).toHaveLength(2);
   });
 
-  it('requires collection_id when finding tracks', async () => {
-    const client = mockClient();
+  it('searches the default collection when finding tracks without collection_id', async () => {
+    const listTracks = vi.fn().mockResolvedValue({
+      exact: [{ id: 't1', title: 'Theme', collection_id: 'lib' }],
+      partial: [],
+    });
+    const client = mockClient({ listTracks });
     const result = await findResource(client, { type: 'track', name: 'Theme' });
-    expect(result.status).toBe('needs_input');
-    expect(result.code).toBe('COLLECTION_REQUIRED');
+    expect(listTracks).toHaveBeenCalledWith('default', {
+      q: 'Theme',
+      limit: 20,
+    });
+    expect(result.status).toBe('success');
+    expect(result.code).toBe('EXACT_MATCH');
   });
 });

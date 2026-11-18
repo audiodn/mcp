@@ -1,18 +1,18 @@
 {
-  "openapiVersion": "1.3.0",
+  "openapiVersion": "1.5.0",
   "generatedBy": "scripts/sync-canonical.mjs",
   "sources": [
     {
       "name": "openapi.json",
-      "url": "file://../audiodn-mono/www/public/openapi.json",
-      "fetchedAt": "2026-11-11",
-      "sha256": "571f6ddd690495c223729eb7b581013e47a08777081e2daa0c4f6976b6ae391f"
+      "url": "file:///Volumes/DEV/audiodn/audiodn-mono/www/public/openapi.json",
+      "fetchedAt": "2026-11-18T19:45:52.845Z",
+      "sha256": "5ffcfaf28011b64dd283ed1207555f8b43d494bc4d54868d048c9ffe84267918"
     },
     {
       "name": "llms-full.txt",
-      "url": "file://../audiodn-mono/www/public/llms-full.txt",
-      "fetchedAt": "2026-11-11",
-      "sha256": "8aef9a888e802dd9034b51ca9231e20a9d5e33454a489bd63f3039e74a49a13b"
+      "url": "file:///Volumes/DEV/audiodn/audiodn-mono/www/public/llms-full.txt",
+      "fetchedAt": "2026-11-18T22:10:00.000Z",
+      "sha256": "5e756b490e624b81df15dc4a54e34a80fd49fb0fd2b68131ad9b33093b6bf330"
     }
   ]
 }

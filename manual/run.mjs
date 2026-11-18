@@ -170,11 +170,28 @@ async function main() {
   const noCollection = await callTool(client, 'adn_create_track', {
     file_name: 'orphan.mp3',
   });
+  const defaultTrackId = idOf(noCollection.parsed, 'track_id');
   resultLine(
-    noCollection.isError,
-    'adn_create_track without collection_id (expect error)',
-    noCollection.parsed,
+    !noCollection.isError &&
+      Boolean(defaultTrackId) &&
+      noCollection.parsed?.stage === 'upload_url_issued',
+    'adn_create_track without collection_id (uses default collection)',
+    {
+      stage: noCollection.parsed?.stage,
+      track_id: defaultTrackId,
+      message: noCollection.parsed?.message,
+    },
   );
+  if (defaultTrackId) {
+    const delDefault = await callTool(client, 'adn_delete_track', {
+      track_id: defaultTrackId,
+    });
+    resultLine(
+      !delDefault.isError,
+      'adn_delete_track (default-collection track cleanup)',
+      delDefault.parsed,
+    );
+  }
 
   if (trackId) {
     const processing = await callTool(client, 'adn_get_processing', {

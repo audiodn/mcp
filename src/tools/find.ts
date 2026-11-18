@@ -23,13 +23,6 @@ export async function findResource(
   if (!name) {
     return needsInput('NAME_REQUIRED', 'name is required');
   }
-  if (args.type === 'track' && !args.collection_id) {
-    return needsInput(
-      'COLLECTION_REQUIRED',
-      'collection_id is required when finding a track by name',
-    );
-  }
-
   let exact: any[] = [];
   let partial: any[] = [];
   let has_more = false;
@@ -45,7 +38,9 @@ export async function findResource(
     partial = res.partial || [];
     has_more = Boolean(res.has_more);
   } else {
-    const res: any = await client.listTracks(args.collection_id!, {
+    // Omitted collection_id uses the org default collection ("default" sentinel).
+    const collectionId = args.collection_id || 'default';
+    const res: any = await client.listTracks(collectionId, {
       q: name,
       limit: 20,
     });

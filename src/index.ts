@@ -8,15 +8,13 @@
  * Claude Code, VS Code, Codex, etc.) can configure audio hosting on a user's
  * behalf and look up the correct, canonical API surface.
  *
- * Configure with:
+ * Prefer the hosted endpoint (https://mcp.audiodelivery.net/mcp) for OAuth
+ * account login and onboarding (no pasted API key). Stdio local/script use:
  *   ADN_API_KEY=adn_...        (optional — knowledge tools work without it;
- *                               live API tools activate when set)
+ *                               live API tools activate when set; skips hosted OAuth)
  *   ADN_API_BASE_URL=...       (optional, defaults to https://api.audiodelivery.net)
  *   ADN_MCP_LIVE_DOCS=1        (optional, refresh docs from the public site)
  *   ADN_MCP_TIMEOUT_MS=30000   (optional, per-request timeout)
- *
- * Prefer the hosted endpoint (https://mcp.audiodelivery.net/mcp) for account
- * login via OAuth. Stdio uses ADN_API_KEY per the MCP authorization spec.
  *
  * Run as a stdio MCP server:
  *   npx @audiodn/mcp
@@ -40,7 +38,7 @@ async function main() {
 
   if (!client) {
     console.error(
-      'ADN_API_KEY is not set. Starting with knowledge/doc tools only. Set ADN_API_KEY to enable live API tools, or use the hosted MCP URL for OAuth account login.',
+      'ADN_API_KEY is not set. Starting with knowledge/doc tools only. Prefer https://mcp.audiodelivery.net/mcp for OAuth account login and onboarding (hosted MCP does not use pasted API keys).',
     );
   }
 

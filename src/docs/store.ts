@@ -9,6 +9,8 @@ export const GUIDE_TOPICS = [
   'security',
   'compatibility',
   'workflows',
+  'web-components',
+  'native-playback',
 ] as const;
 
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];

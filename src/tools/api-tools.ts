@@ -16,6 +16,13 @@ const hexColor = z
   .string()
   .regex(/^#[0-9A-Fa-f]{6}$/)
   .optional();
+/** Empty string clears; non-empty must be https. */
+const webhookUrlField = z
+  .string()
+  .refine((v) => v === '' || v.startsWith('https://'), {
+    message: 'webhook URL must be empty (to clear) or an https URL',
+  })
+  .optional();
 const expiresIn = z.number().int().min(60).max(86400).optional();
 const usageDate = z
   .string()
@@ -81,8 +88,35 @@ function requireNonEmptyBody(
   }
 }
 
+function uploadActionRequired(result: any) {
+  const upload = result?.track_upload || {};
+  return {
+    ...result,
+    status: 'action_required',
+    code: 'PUT_AUDIO_BYTES',
+    stage: result?.stage || 'upload_url_issued',
+    method: upload.method || 'PUT',
+    upload_url: upload.upload_url,
+    expires_at: upload.expires_at,
+    message:
+      'Track created and upload URL issued — the audio file is NOT stored yet. PUT the file bytes to track_upload.upload_url (method PUT) with your own HTTP client, then call adn_wait_for_processing. Do not store the upload URL.',
+  };
+}
+
+export interface ApiToolsOptions {
+  /** OAuth grant connection id (hosted). */
+  connectionId?: string;
+  /** API key id on the OAuth grant; used to detect self-revoke. */
+  grantApiKeyId?: string;
+  /** Drop the OAuth grant after revoking the current connection's key. */
+  onRevokeConnection?: () => Promise<void>;
+}
+
 /** Live AudioDN REST API tools (reads, mutations, and deletes). */
-export function createApiTools(client: AdnClient): ToolDef[] {
+export function createApiTools(
+  client: AdnClient,
+  opts: ApiToolsOptions = {},
+): ToolDef[] {
   return [
     // --- Organization ---
     {
@@ -121,12 +155,167 @@ export function createApiTools(client: AdnClient): ToolDef[] {
         return client.updateOrganization(organizationId, body);
       },
     },
+    {
+      name: 'adn_get_webhooks',
+      description:
+        'Get the organization webhook URL configuration (webhook_url, webhook_url_collection, webhook_url_file) via GET /v1/organization/{id}/webhooks. Requires a full API Access key. organization_id is optional and derived from the API key when omitted. See the webhooks guide.',
+      inputSchema: z.object({
+        organization_id: z.string().uuid().optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get webhook URLs' },
+      handler: (args: any) => {
+        const organizationId =
+          args.organization_id ?? organizationIdFromApiKey(client.getApiKey());
+        return client.getOrganizationWebhooks(organizationId);
+      },
+    },
+    {
+      name: 'adn_set_webhooks',
+      description:
+        'Set or clear organization webhook URLs via PUT /v1/organization/{id}/webhooks. Requires a full API Access key. Empty string clears a URL; omitted fields are left unchanged. URLs must be https. organization_id is optional and derived from the API key when omitted. See the webhooks guide.',
+      inputSchema: z.object({
+        organization_id: z.string().uuid().optional(),
+        webhook_url: webhookUrlField,
+        webhook_url_collection: webhookUrlField,
+        webhook_url_file: webhookUrlField,
+      }),
+      annotations: { ...WRITE_IDEMPOTENT, title: 'Set webhook URLs' },
+      handler: (args: any) => {
+        const { organization_id, ...body } = args;
+        requireNonEmptyBody(body, 'adn_set_webhooks');
+        const organizationId =
+          organization_id ?? organizationIdFromApiKey(client.getApiKey());
+        return client.updateOrganizationWebhooks(organizationId, body);
+      },
+    },
+    {
+      name: 'adn_test_webhook',
+      description:
+        'Synchronously POST a synthetic sample webhook event to a configured or supplied URL via POST /v1/organization/{id}/webhooks/test. Requires a full API Access key. Returns delivered/status/response_snippet. Does not write to the delivery log. See the webhooks guide.',
+      inputSchema: z.object({
+        organization_id: z.string().uuid().optional(),
+        channel: z.enum(['track', 'collection', 'file']).optional(),
+        url: z
+          .string()
+          .url()
+          .refine((v) => v.startsWith('https://'), {
+            message: 'url must use https',
+          })
+          .optional(),
+        event: z.string().min(1).optional(),
+      }),
+      annotations: { ...WRITE, title: 'Test webhook delivery' },
+      handler: (args: any) => {
+        const { organization_id, ...body } = args;
+        const organizationId =
+          organization_id ?? organizationIdFromApiKey(client.getApiKey());
+        return client.testOrganizationWebhook(organizationId, body);
+      },
+    },
+
+    // --- Account / billing ---
+    {
+      name: 'adn_list_plans',
+      description:
+        'List public AudioDN plans and prices (GET /v1/plan). No auth required on the API; available here when authenticated so agents can pick a plan for checkout.',
+      inputSchema: z.object({}),
+      annotations: { ...READ_ONLY, title: 'List plans' },
+      handler: () => client.listPlans(),
+    },
+    {
+      name: 'adn_get_subscription',
+      description:
+        'Get the organization subscription and plan details (GET /v1/subscription). Answers "what plan am I on?" and trial status.',
+      inputSchema: z.object({}),
+      annotations: { ...READ_ONLY, title: 'Get subscription' },
+      handler: () => client.getSubscription(),
+    },
+    {
+      name: 'adn_create_checkout',
+      description:
+        'Create a Stripe Checkout session (POST /v1/subscription/checkout). Returns checkout_url for the user to open in a browser. Pass plan_price_id (preferred) or plan_id plus success_url and cancel_url.',
+      inputSchema: z.object({
+        plan_id: z.string().uuid().optional(),
+        plan_price_id: z.string().uuid().optional(),
+        success_url: z.string().url(),
+        cancel_url: z.string().url(),
+      }),
+      annotations: { ...WRITE, title: 'Create subscription checkout' },
+      handler: (args: any) => {
+        if (!args.plan_id && !args.plan_price_id) {
+          throw new Error(
+            'adn_create_checkout: provide plan_price_id or plan_id',
+          );
+        }
+        return client.createSubscriptionCheckout(args);
+      },
+    },
+    {
+      name: 'adn_create_billing_portal',
+      description:
+        'Create a Stripe Customer Portal session (POST /v1/subscription/portal). Returns portal_url for the user to manage billing. Requires return_url.',
+      inputSchema: z.object({
+        return_url: z.string().url(),
+      }),
+      annotations: { ...WRITE, title: 'Open billing portal' },
+      handler: (args: any) => client.createSubscriptionPortal(args),
+    },
+    {
+      name: 'adn_list_transactions',
+      description:
+        'List billing transactions for the organization (GET /v1/transaction).',
+      inputSchema: z.object({
+        limit: limitSchema,
+        offset: z.number().int().min(0).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'List transactions' },
+      handler: (args: any) => client.listTransactions(args),
+    },
+    {
+      name: 'adn_get_ai_credits',
+      description:
+        'AI credit wallet summary for the organization (GET /v1/ai_credits): available, included, purchased, trial, allowance.',
+      inputSchema: z.object({}),
+      annotations: { ...READ_ONLY, title: 'Get AI credits' },
+      handler: () => client.getAiCredits(),
+    },
+    {
+      name: 'adn_get_ai_credit_activity',
+      description:
+        'Recent AI credit ledger rows (GET /v1/ai_credits/activity).',
+      inputSchema: z.object({
+        limit: limitSchema,
+        offset: z.number().int().min(0).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get AI credit activity' },
+      handler: (args: any) => client.getAiCreditActivity(args),
+    },
+    {
+      name: 'adn_get_ai_credit_rates',
+      description:
+        'AI credit service rates (GET /v1/ai_credits/rates).',
+      inputSchema: z.object({}),
+      annotations: { ...READ_ONLY, title: 'Get AI credit rates' },
+      handler: () => client.getAiCreditRates(),
+    },
+    {
+      name: 'adn_create_ai_credits_topup',
+      description:
+        'Create a Stripe Checkout session to purchase AI credits (POST /v1/ai_credits/topup). Returns a checkout URL for the user to open. Pass amount_cents plus success_url and cancel_url.',
+      inputSchema: z.object({
+        amount_cents: z.number().int().positive(),
+        success_url: z.string().url(),
+        cancel_url: z.string().url(),
+      }),
+      annotations: { ...WRITE, title: 'Top up AI credits' },
+      handler: (args: any) => client.createAiCreditsTopup(args),
+    },
 
     // --- Client-side API keys ---
     {
       name: 'adn_create_client_key',
       description:
-        'Mint a scoped Client-Side key (player, uploader, or share) via POST /v1/api_key. Requires an API Access key. The full key is returned once — do not commit or log it. Share keys require exactly one variant and ignore expires_at. Cannot create API Access ("api") keys (dashboard only). track_id requires collection_id.',
+        'Mint a scoped Client-Side key (player, uploader, or share) via POST /v1/api_key. Requires an API Access key. The full key is returned once — do not commit or log it. Share keys require exactly one variant and ignore expires_at. Cannot create API Access ("api") or URL Signing ("signing") keys (both dashboard-only). The player key is the client-safe credential to ship in a mobile/native app (creates play sessions only; see the native-playback guide). track_id requires collection_id.',
       inputSchema: z.object({
         title: z.string().min(2),
         api_key_type_id: z.enum(['player', 'uploader', 'share']),
@@ -151,6 +340,52 @@ export function createApiTools(client: AdnClient): ToolDef[] {
           }
         }
         return client.createApiKey(args);
+      },
+    },
+    {
+      name: 'adn_list_api_keys',
+      description:
+        'List API keys for the organization (GET /v1/api_key). Returns metadata only: id, title, type, created_at, scope ids. Never returns key material. Use adn_revoke_api_key to disconnect an MCP or other Access key.',
+      inputSchema: z.object({
+        limit: limitSchema,
+        offset: z.number().int().min(0).optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'List API keys' },
+      handler: (args: any) => client.listApiKeys(args),
+    },
+    {
+      name: 'adn_revoke_api_key',
+      description:
+        'Soft-delete an API key (DELETE /v1/api_key/:id). Destructive. URL Signing keys are refused — delete those in the dashboard. Revoking the key that backs this hosted MCP connection also drops the OAuth grant (next live call returns 401). Pass dry_run=true to preview.',
+      inputSchema: z.object({
+        api_key_id: z.string().uuid(),
+        dry_run: z.boolean().optional(),
+      }),
+      annotations: { ...DESTRUCTIVE, title: 'Revoke API key' },
+      handler: async (args: any) => {
+        if (args.dry_run) {
+          return {
+            status: 'success',
+            code: 'DELETE_PREVIEW',
+            dry_run: true,
+            api_key_id: args.api_key_id,
+            message:
+              'Dry run only — call again without dry_run to revoke this API key',
+          };
+        }
+        const result: any = await client.deleteApiKey(args.api_key_id);
+        const selfRevoke =
+          Boolean(opts.grantApiKeyId) &&
+          opts.grantApiKeyId === args.api_key_id;
+        if (selfRevoke && opts.onRevokeConnection) {
+          await opts.onRevokeConnection();
+        }
+        return {
+          ...result,
+          status: 'success',
+          code: 'API_KEY_REVOKED',
+          oauth_connection_dropped: selfRevoke,
+        };
       },
     },
 
@@ -335,16 +570,18 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_list_tracks',
       description:
-        'List tracks in a collection. Optional q filters by player_title/file_name. Prefer adn_find_resource for name resolution.',
+        'List tracks in a collection. When collection_id is omitted, the organization default collection is used (API sentinel "default"). Optional q filters by player_title/file_name. Prefer adn_find_resource for name resolution.',
       inputSchema: z.object({
-        collection_id: z.string().uuid(),
+        collection_id: z
+          .union([z.string().uuid(), z.literal('default')])
+          .optional(),
         limit: limitSchema,
         offset: z.number().int().min(0).optional(),
         q: z.string().optional(),
       }),
       annotations: { ...READ_ONLY, title: 'List tracks' },
       handler: (args: any) =>
-        client.listTracks(args.collection_id, {
+        client.listTracks(args.collection_id || 'default', {
           limit: args.limit,
           offset: args.offset,
           q: args.q,
@@ -430,13 +667,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
         const result: any = await client.createTrack(body, {
           idempotencyKey: idempotency_key,
         });
-        return {
-          ...result,
-          status: 'success',
-          stage: result.stage || 'upload_url_issued',
-          message:
-            'Track created and upload URL issued. PUT audio bytes to track_upload.upload_url, then use adn_wait_for_processing.',
-        };
+        return uploadActionRequired(result);
       },
     },
     {
@@ -464,12 +695,16 @@ export function createApiTools(client: AdnClient): ToolDef[] {
         track: nestedUploadTrack.optional(),
       }),
       annotations: { ...WRITE, title: 'Create upload session' },
-      handler: (args: any) => {
+      handler: async (args: any) => {
         const body = { ...args };
         if (!body.collection_id) {
           body.collection_id = 'default';
         }
-        return client.createUploadSession(body);
+        const result: any = await client.createUploadSession(body);
+        if (result?.track_upload?.upload_url) {
+          return uploadActionRequired(result);
+        }
+        return result;
       },
     },
     {
@@ -483,7 +718,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_create_track_in_upload_session',
       description:
-        'Register a new track inside an existing upload session. Returns track_id plus a per-track signed upload target at track_upload.upload_url (use track_upload.method, which is PUT) that you upload the audio bytes to. A cover image target is returned at track_cover_upload. Call once per file. The upload URL is short-lived — do not store or cache it.',
+        'Register a new track inside an existing upload session. Returns status action_required / PUT_AUDIO_BYTES with track_upload.upload_url — the audio is NOT stored until you PUT the bytes. A cover image target is returned at track_cover_upload. Call once per file. The upload URL is short-lived — do not store or cache it.',
       inputSchema: z.object({
         upload_session_id: z.string().uuid(),
         file_name: z.string().min(1),
@@ -492,9 +727,13 @@ export function createApiTools(client: AdnClient): ToolDef[] {
         ...playerFields,
       }),
       annotations: { ...WRITE, title: 'Create track in upload session' },
-      handler: (args: any) => {
+      handler: async (args: any) => {
         const { upload_session_id, ...body } = args;
-        return client.createTrackInUploadSession(upload_session_id, body);
+        const result: any = await client.createTrackInUploadSession(
+          upload_session_id,
+          body,
+        );
+        return uploadActionRequired(result);
       },
     },
 
@@ -502,7 +741,7 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_create_play_session',
       description:
-        'Mint a play session. Scope is "collection" or "track", and exactly one of collection_id / track_id must be provided (unless the API key is already scoped to that resource). The variants body field is required: a non-empty list of output indexes from adn_list_output_presets (e.g. hq, lq). Returns play_session_id, tracks, and first_track with signed output URLs under the historical variants key — pass the play_session_id to the ADN Player; use the signed URLs only with a custom player. Playlist scope is not supported.',
+        'Mint a play session. Scope is "collection" or "track", and exactly one of collection_id / track_id must be provided (unless the API key is already scoped to that resource). The variants body field is required: a non-empty list of output indexes from adn_list_output_presets (e.g. hq, lq). Returns play_session_id, tracks, and first_track with signed output URLs under the historical variants key — this is how a native/mobile client (or server) obtains signed delivery URLs (first_track.variants[].url); a Client-Side Player key on the device can call it directly (see the native-playback guide). Pass the play_session_id to the ADN Player; use the signed URLs only with a custom player. Playlist scope is not supported.',
       inputSchema: z.object({
         scope: z.enum(['collection', 'track']),
         collection_id: z.string().uuid().optional(),
@@ -611,6 +850,132 @@ export function createApiTools(client: AdnClient): ToolDef[] {
       annotations: { ...WRITE, title: 'Create track variant (legacy)' },
       handler: createTrackOutput,
     },
+    {
+      name: 'adn_create_output_preset',
+      description:
+        'Create an organization-level output preset (POST /v1/output_preset). Free-form creates are limited to output_type_id transcode or preview (same as track outputs). For waveform/levels/transcribe packs, use adn_apply_output_preset_category.',
+      inputSchema: z.object({
+        output_type_id: z.enum(['transcode', 'preview']).optional(),
+        variant_type_id: z.enum(['transcode', 'preview']).optional(),
+        index: z.string().min(2).max(64),
+        is_required: z.boolean().optional(),
+        notes: z.string().optional(),
+        codec: z.enum(['aac', 'mp3', 'ogg', 'opus']).optional(),
+        bitrate: z.number().int().min(12).max(320).optional(),
+        is_stereo: z.boolean().optional(),
+        is_strip_tags: z.boolean().optional(),
+        is_strip_cover: z.boolean().optional(),
+        preview_type: z.enum(['seconds', 'percent']).optional(),
+        preview_seconds: z.number().optional(),
+        preview_min_percent: z.number().optional(),
+        preview_max_percent: z.number().optional(),
+        preview_percent: z.number().optional(),
+        preview_min_seconds: z.number().optional(),
+        preview_max_seconds: z.number().optional(),
+        preview_start_percent: z.number().min(0).max(100).optional(),
+      }),
+      annotations: { ...WRITE, title: 'Create org output preset' },
+      handler: (args: any) => {
+        const { output_type_id, variant_type_id, ...rest } = args;
+        const typeId = variant_type_id ?? output_type_id;
+        if (!typeId) {
+          throw new Error('Provide output_type_id (or legacy variant_type_id).');
+        }
+        return client.createOrgOutputPreset({
+          ...rest,
+          variant_type_id: typeId,
+          ...(output_type_id ? { output_type_id } : {}),
+        });
+      },
+    },
+    {
+      name: 'adn_update_output_preset',
+      description:
+        'Limited update of an output preset (PUT /v1/output_preset/:id): notes, is_required, and is_require_lossless_source only. Other processing props are immutable after create.',
+      inputSchema: z.object({
+        output_preset_id: z.string().uuid(),
+        notes: z.string().nullable().optional(),
+        is_required: z.boolean().optional(),
+        is_require_lossless_source: z.boolean().optional(),
+      }),
+      annotations: { ...WRITE_IDEMPOTENT, title: 'Update output preset' },
+      handler: (args: any) => {
+        const { output_preset_id, ...body } = args;
+        requireNonEmptyBody(body, 'adn_update_output_preset');
+        return client.updateOrgOutputPreset(output_preset_id, body);
+      },
+    },
+    {
+      name: 'adn_delete_output_preset',
+      description:
+        'Soft-delete an organization output preset (DELETE /v1/output_preset/:id). Destructive. Refuses original and cover. Pass dry_run=true to preview.',
+      inputSchema: z.object({
+        output_preset_id: z.string().uuid(),
+        dry_run: z.boolean().optional(),
+      }),
+      annotations: { ...DESTRUCTIVE, title: 'Delete output preset' },
+      handler: async (args: any) => {
+        if (args.dry_run) {
+          const preset: any = await client.getVariant(args.output_preset_id);
+          return {
+            status: 'success',
+            code: 'DELETE_PREVIEW',
+            dry_run: true,
+            output_preset_id: args.output_preset_id,
+            output_preset: preset.output_preset || preset.variant || preset,
+            message:
+              'Dry run only — call again without dry_run to soft-delete this output preset',
+          };
+        }
+        return client.deleteOrgOutputPreset(args.output_preset_id);
+      },
+    },
+    {
+      name: 'adn_apply_output_preset_category',
+      description:
+        'Seed recommended organization output presets for a use-case category (POST /v1/output_preset/apply_category). Categories: podcasting, music, ecommerce, audiobooks, voice_messages, video, general. Existing indexes are skipped. This is how "switch me to the podcast presets" works without the dashboard advisor.',
+      inputSchema: z.object({
+        category_id: z.enum([
+          'podcasting',
+          'music',
+          'ecommerce',
+          'audiobooks',
+          'voice_messages',
+          'video',
+          'general',
+        ]),
+      }),
+      annotations: { ...WRITE, title: 'Apply output preset category' },
+      handler: (args: any) => client.applyOutputPresetCategory(args),
+    },
+    {
+      name: 'adn_get_cover_status',
+      description:
+        'Poll cover-image colour extraction status (GET …/cover_status). Pass cloudflare_image_id plus either collection_id or track_id. Prefer adn_wait_for_processing with target=cover for a bounded wait.',
+      inputSchema: z.object({
+        cloudflare_image_id: z.string().min(1),
+        collection_id: z.string().uuid().optional(),
+        track_id: z.string().uuid().optional(),
+      }),
+      annotations: { ...READ_ONLY, title: 'Get cover status' },
+      handler: (args: any) => {
+        if (args.track_id) {
+          return client.getTrackCoverStatus(
+            args.track_id,
+            args.cloudflare_image_id,
+          );
+        }
+        if (args.collection_id) {
+          return client.getCollectionCoverStatus(
+            args.collection_id,
+            args.cloudflare_image_id,
+          );
+        }
+        throw new Error(
+          'adn_get_cover_status: provide collection_id or track_id',
+        );
+      },
+    },
 
     // --- Usage & reporting ---
     {
@@ -682,11 +1047,13 @@ export function createApiTools(client: AdnClient): ToolDef[] {
     {
       name: 'adn_find_resource',
       description:
-        'Resolve a collection, creator, or track by name. Returns an exact match id, needs_input with candidates when ambiguous, or needs_input when nothing matches. Never creates resources and never silently picks among duplicates.',
+        'Resolve a collection, creator, or track by name. Returns an exact match id, needs_input with candidates when ambiguous, or needs_input when nothing matches. Never creates resources and never silently picks among duplicates. When type is track and collection_id is omitted, the organization default collection is searched.',
       inputSchema: z.object({
         type: z.enum(['collection', 'creator', 'track']),
         name: z.string().min(1),
-        collection_id: z.string().uuid().optional(),
+        collection_id: z
+          .union([z.string().uuid(), z.literal('default')])
+          .optional(),
       }),
       annotations: { ...READ_ONLY, title: 'Find resource by name' },
       handler: (args: any) => findResource(client, args),
@@ -754,8 +1121,13 @@ export function createApiTools(client: AdnClient): ToolDef[] {
  */
 export const OPERATION_TOOL_MAP: Record<string, string | null> = {
   createApiKey: 'adn_create_client_key',
+  listApiKeys: 'adn_list_api_keys',
+  deleteApiKey: 'adn_revoke_api_key',
   getOrganization: 'adn_get_organization',
   updateOrganization: 'adn_update_organization',
+  getOrganizationWebhooks: 'adn_get_webhooks',
+  updateOrganizationWebhooks: 'adn_set_webhooks',
+  testOrganizationWebhook: 'adn_test_webhook',
   listCreators: 'adn_list_creators',
   createCreator: 'adn_create_creator',
   getCreator: 'adn_get_creator',
@@ -768,12 +1140,14 @@ export const OPERATION_TOOL_MAP: Record<string, string | null> = {
   deleteCollection: 'adn_delete_collection',
   listCollectionTracks: 'adn_list_tracks',
   createCollectionCover: 'adn_create_collection_cover',
+  getCollectionCoverStatus: 'adn_get_cover_status',
   createTrack: 'adn_create_track',
   getTrack: 'adn_get_track',
   getTrackProcessing: 'adn_get_processing',
   updateTrack: 'adn_update_track',
   deleteTrack: 'adn_delete_track',
   createTrackCover: 'adn_create_track_cover',
+  getTrackCoverStatus: 'adn_get_cover_status',
   addTrackVariant: 'adn_create_track_variant',
   addTrackOutput: 'adn_create_track_output',
   createUploadSession: 'adn_create_upload_session',
@@ -787,6 +1161,19 @@ export const OPERATION_TOOL_MAP: Record<string, string | null> = {
   getVariant: 'adn_get_variant',
   listOutputPresets: 'adn_list_output_presets',
   getOutputPreset: 'adn_get_output_preset',
+  createOutputPreset: 'adn_create_output_preset',
+  updateOutputPreset: 'adn_update_output_preset',
+  deleteOutputPreset: 'adn_delete_output_preset',
+  applyOutputPresetCategory: 'adn_apply_output_preset_category',
+  listPlans: 'adn_list_plans',
+  getSubscription: 'adn_get_subscription',
+  createSubscriptionCheckout: 'adn_create_checkout',
+  createSubscriptionPortal: 'adn_create_billing_portal',
+  listTransactions: 'adn_list_transactions',
+  getAiCredits: 'adn_get_ai_credits',
+  getAiCreditActivity: 'adn_get_ai_credit_activity',
+  getAiCreditRates: 'adn_get_ai_credit_rates',
+  createAiCreditsTopup: 'adn_create_ai_credits_topup',
   getUsage: 'adn_get_usage',
   getUploadStats: 'adn_get_upload_stats',
   getAiSpend: 'adn_get_ai_spend',
@@ -794,9 +1181,20 @@ export const OPERATION_TOOL_MAP: Record<string, string | null> = {
   getDelivery: 'adn_get_delivery',
   // 302 redirect with share key in the path — not a useful MCP tool.
   getStreamRedirect: null,
+  // Stripe inbound webhook — not an agent tool.
+  handleStripeWebhook: null,
+  // Pre-org trial bootstrap — OAuth onboarding covers trial; normal upload after.
+  createTrialUploadSession: null,
+  claimTrialTrack: null,
 };
 
 export const OMITTED_OPERATIONS: Record<string, string> = {
   getStreamRedirect:
     'Inline share is a 302 with the share key in the path; agents should mint a share key via adn_create_client_key and document the URL, not fetch it.',
+  handleStripeWebhook:
+    'Stripe signs inbound webhooks; agents never call this endpoint.',
+  createTrialUploadSession:
+    'Pre-organization trial upload is started during OAuth onboarding; after sign-in use adn_create_track.',
+  claimTrialTrack:
+    'Trial claim is part of dashboard/OAuth onboarding; after sign-in use normal track tools.',
 };

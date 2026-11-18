@@ -40,8 +40,8 @@ Point a remote-capable MCP client at `https://mcp.audiodelivery.net/mcp` with
 a revocable API Access key (visible under Settings → API Keys as `MCP · …`).
 Delete that key to disconnect.
 
-Legacy configs that still send `Authorization: Bearer <API Access key>` or
-`X-ADN-API-Key` continue to work.
+Hosted MCP does not accept a pasted API Access key. Use OAuth on the hosted
+URL, or local stdio with `ADN_API_KEY` below.
 
 ### Local stdio
 
@@ -85,16 +85,11 @@ Besides the local `npx` stdio server above, AudioDN runs the same tool set as a
   `/health` returns machine-readable server info.
 - **Auth — OAuth account login:** compatible clients discover
   `/.well-known/oauth-protected-resource` and complete authorization code + PKCE
-  against this host. Unauthenticated `/mcp` requests return `401` with a
-  `WWW-Authenticate` challenge. Knowledge and live tools (including deletes)
-  require authentication on the hosted endpoint.
-- **Auth — legacy API key:** send your AudioDN API Access key on every request:
-
-```
-Authorization: Bearer adn_...
-# or
-X-ADN-API-Key: adn_...
-```
+  against this host. Knowledge tools and `adn_build_player_embed` work without an
+  account. Live API tool calls (and `adn_sign_in`) return `401` with a
+  `WWW-Authenticate` challenge so the client starts OAuth. Pasted API Access
+  keys are **rejected** on the hosted endpoint — use OAuth there, or local
+  stdio with `ADN_API_KEY`.
 
 Example client configuration (OAuth — no pasted key):
 
@@ -206,8 +201,9 @@ env = { ADN_API_KEY = "adn_..." }
 | `adn_get_guide` | Canonical guide (authentication, upload, processing, playback, webhooks, output-types / variant-types, security, compatibility). |
 | `adn_list_output_types` | The seven output types and which are API-creatable (`adn_list_variant_types` is a legacy alias). |
 
-On the **hosted** endpoint these require authentication (OAuth or legacy API
-key). On **stdio** they work without `ADN_API_KEY`.
+On the **hosted** endpoint these (plus `adn_build_player_embed`) work without
+an account. Live API tools require OAuth. On **stdio** knowledge tools work
+without `ADN_API_KEY`.
 
 ### Live API tools
 
@@ -215,6 +211,10 @@ key). On **stdio** they work without `ADN_API_KEY`.
 | --- | --- | --- |
 | `adn_get_organization` / `adn_update_organization` | Read/update org (id derived from API key when omitted) | read-only / write |
 | `adn_create_client_key` | Mint player / uploader / share key (returned once) | write |
+| `adn_list_api_keys` / `adn_revoke_api_key` | List key metadata / soft-delete (signing keys refused) | read-only / destructive |
+| `adn_list_plans` / `adn_get_subscription` / `adn_list_transactions` | Account plan and subscription | read-only |
+| `adn_create_checkout` / `adn_create_billing_portal` | Stripe checkout / portal URLs | write |
+| `adn_get_ai_credits` / activity / rates / `adn_create_ai_credits_topup` | AI credit wallet and top-up URL | read-only / write |
 | `adn_list_creators` / `adn_get_creator` | Read creators | read-only |
 | `adn_create_creator` / `adn_update_creator` | Create/update creator | write |
 | `adn_delete_creator` | Delete creator | destructive |
@@ -236,7 +236,10 @@ key). On **stdio** they work without `ADN_API_KEY`.
 | `adn_get_play_track` | Signed URLs for a track inside a play session | read-only |
 | `adn_get_play_download` | Signed download URL for one output index (downloadable sessions) | read-only |
 | `adn_list_output_presets` / `adn_get_output_preset` | List/get org output presets (legacy: `adn_list_variants` / `adn_get_variant`) | read-only |
+| `adn_create_output_preset` / `adn_update_output_preset` / `adn_delete_output_preset` | Org preset create / limited update / soft-delete | write / destructive |
+| `adn_apply_output_preset_category` | Seed recommended presets for a use-case category | write |
 | `adn_create_track_output` | Add a track-specific transcode/preview output (legacy: `adn_create_track_variant`) | write |
+| `adn_get_cover_status` | Cover colour extraction status | read-only |
 
 ## Resources
 

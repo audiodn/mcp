@@ -22,6 +22,7 @@ import {
   unauthorizedResponse,
 } from './oauth/metadata.js';
 import { resolveRequestAuth } from './oauth/resolve.js';
+import { mcpRequestRequiresOAuth } from './oauth/request-auth-gate.js';
 import {
   handleApprove,
   handleAuthorize,
@@ -45,10 +46,24 @@ export interface Env extends OAuthEnv {
 }
 
 export interface RequestServerOptions {
-  /** Resolved AudioDN API Access key (from OAuth grant or legacy header). */
-  apiKey: string;
+  /**
+   * Resolved AudioDN API Access key from an OAuth grant.
+   * When omitted, the server is knowledge-only (plus advertised live stubs on hosted).
+   */
+  apiKey?: string;
   baseUrl?: string;
   version?: string;
+  /**
+   * Advertise live API tool schemas without a key so agents can call them and
+   * trigger OAuth (hosted returns 401). Default true when apiKey is missing.
+   */
+  advertiseLiveTools?: boolean;
+  /** OAuth grant connection id (hosted). */
+  connectionId?: string;
+  /** API key id stored on the OAuth grant. */
+  grantApiKeyId?: string;
+  /** Drop the OAuth grant after revoking the current connection's key. */
+  onRevokeConnection?: () => Promise<void>;
 }
 
 /** Legacy helper: returns non-JWT API keys from headers (tests + debugging). */
@@ -75,20 +90,31 @@ export function readAllowDelete(_request: Request): boolean {
 }
 
 /**
- * Tools for an authenticated hosted request: knowledge + full live API (incl. deletes).
+ * Tools for a hosted request: knowledge always; live API when OAuth-authenticated;
+ * otherwise advertise live tool schemas so calls can trigger OAuth.
  */
 export function selectHostedTools(
   store: DocStore,
   opts: RequestServerOptions,
 ): ToolDef[] {
-  const client = new AdnClient({ apiKey: opts.apiKey, baseUrl: opts.baseUrl });
-  return selectTools(store, { client });
+  if (opts.apiKey) {
+    const client = new AdnClient({ apiKey: opts.apiKey, baseUrl: opts.baseUrl });
+    return selectTools(store, {
+      client,
+      connectionId: opts.connectionId,
+      grantApiKeyId: opts.grantApiKeyId,
+      onRevokeConnection: opts.onRevokeConnection,
+    });
+  }
+  return selectTools(store, {
+    advertiseLiveTools: opts.advertiseLiveTools !== false,
+  });
 }
 
 /** Build a fresh McpServer per request (required for stateless safety). */
 export function createRequestServer(
   store: DocStore,
-  opts: RequestServerOptions,
+  opts: RequestServerOptions = {},
 ): McpServer {
   const version = opts.version ?? store.about().serverVersion;
   const server = new McpServer(
@@ -150,22 +176,19 @@ export function infoPayload(store: DocStore) {
     name: 'audiodn-mcp',
     version: about.serverVersion,
     description:
-      'AudioDN Model Context Protocol server (hosted, Streamable HTTP). Sign in with your AudioDN account via OAuth (MCP authorization). Legacy API Access keys still work as Bearer tokens. Local stdio uses ADN_API_KEY.',
+      'AudioDN Model Context Protocol server (hosted, Streamable HTTP). Connect without an account for docs; live API tools use OAuth account login (sign-up/onboarding included). Pasted API Access keys are not accepted on the hosted endpoint.',
     transport: 'streamable-http',
     endpoint: '/mcp',
     url: HOSTED_URL,
     auth: {
       description:
-        'OAuth 2.1 (authorization code + PKCE) against your AudioDN account, or a legacy API Access key via Authorization: Bearer / X-ADN-API-Key. Knowledge and live API tools (including deletes) require authentication on the hosted endpoint.',
+        'OAuth 2.1 (authorization code + PKCE) against your AudioDN account. Knowledge tools work without auth; live API tool calls return 401 with WWW-Authenticate so the client starts OAuth. Hosted MCP does not accept pasted API Access keys.',
       oauth: {
         protected_resource_metadata: `https://mcp.audiodelivery.net${PRM_PATH}`,
         authorization_server_metadata: `https://mcp.audiodelivery.net${AS_META_PATH}`,
         resource: HOSTED_URL,
       },
-      headers: [
-        'Authorization: Bearer <oauth-access-token-or-ADN_API_KEY>',
-        'X-ADN-API-Key: <ADN_API_KEY>',
-      ],
+      headers: ['Authorization: Bearer <oauth-access-token>'],
     },
     openapiVersion: about.openapiVersion,
     npm: NPM_URL,
@@ -209,22 +232,23 @@ export function landingHtml(store: DocStore): string {
   <p class="sub">Model Context Protocol server for AudioDN · v${v} · OpenAPI ${escapeHtml(openapiVersion)}</p>
 
   <p>Configure AudioDN audio hosting from your AI agent — upload sessions, tracks,
-  playback sessions and variants — plus grounded API docs and guides so
+  playback sessions and outputs — plus grounded API docs and guides so
   agents use the correct endpoints instead of guessing.</p>
 
   <h2>Hosted endpoint (Streamable HTTP)</h2>
   <pre>${escapeHtml(HOSTED_URL)}</pre>
-  <p>Compatible MCP clients sign in with your AudioDN account via <strong>OAuth</strong>
-  (authorization code + PKCE). Point the client at the URL above with no pasted API key.
-  A legacy API Access key still works as <code>Authorization: Bearer</code> or
-  <code>X-ADN-API-Key</code> for existing configs.</p>
-  <p>Authenticated sessions expose the full live API tool set, including destructive
-  deletes (clients should confirm before calling them).</p>
+  <p>Point a compatible MCP client at the URL above with <strong>no API key</strong>.
+  Docs and knowledge tools work immediately. When you upload a track or use any live
+  API tool, the client starts <strong>OAuth</strong> (sign up or log in, create your
+  organization, set output presets, default collection, optional trial).</p>
+  <p>After sign-in, the full live API tool set is available, including destructive
+  deletes (clients should confirm before calling them). Pasted API Access keys are
+  not accepted on the hosted endpoint.</p>
 
   <h2>Run locally (stdio)</h2>
-  <pre>ADN_API_KEY=adn_... npx @audiodn/mcp</pre>
-  <p>Knowledge tools work without a key; set <code>ADN_API_KEY</code> for live API tools
-  (including deletes). Prefer the hosted URL when you want account login instead of a key.</p>
+  <pre>npx @audiodn/mcp</pre>
+  <p>Knowledge tools work without a key. Prefer the hosted URL for account login and
+  onboarding. <code>ADN_API_KEY</code> remains available for local/script use only.</p>
 
   <h2>Links</h2>
   <ul>
@@ -326,7 +350,7 @@ export function createFetchHandler(store: DocStore, serve: Serve) {
       return handleDevConsent(request, env);
     }
 
-    // --- MCP endpoint: require auth ---
+    // --- MCP endpoint: knowledge without auth; live tools via OAuth ---
     if (path === '/mcp') {
       const secrets =
         env.MCP_JWT_SECRET && env.MCP_GRANT_ENCRYPTION_KEY
@@ -341,18 +365,46 @@ export function createFetchHandler(store: DocStore, serve: Serve) {
         configEnv: env,
       });
 
-      if (auth.invalid || !auth.apiKey) {
+      if (auth.invalid) {
+        return unauthorizedResponse('Invalid or expired credentials', env);
+      }
+
+      // Hosted MCP is OAuth-only: reject pasted API Access keys so onboarding
+      // always goes through account login (signup, org, presets, default collection).
+      if (auth.apiKey && !auth.connectionId) {
         return unauthorizedResponse(
-          auth.invalid
-            ? 'Invalid or expired credentials'
-            : 'Authorization required',
+          'Hosted MCP requires OAuth account login. Remove pasted API keys from the client config and connect to https://mcp.audiodelivery.net/mcp so your client can sign in.',
           env,
         );
       }
 
+      if (!auth.apiKey) {
+        if (await mcpRequestRequiresOAuth(request)) {
+          return unauthorizedResponse(
+            'Sign in with your AudioDN account to use live API tools (upload, collections, playback). OAuth also completes organization onboarding.',
+            env,
+          );
+        }
+        const server = createRequestServer(store, {
+          baseUrl: env?.ADN_API_BASE_URL,
+          advertiseLiveTools: true,
+        });
+        return serve(server, request, env, ctx);
+      }
+
+      const connectionId = auth.connectionId;
       const server = createRequestServer(store, {
         apiKey: auth.apiKey,
         baseUrl: env?.ADN_API_BASE_URL,
+        connectionId,
+        grantApiKeyId: auth.apiKeyId,
+        onRevokeConnection:
+          connectionId && env.MCP_OAUTH
+            ? async () => {
+                const { deleteGrant } = await import('./oauth/store.js');
+                await deleteGrant(env.MCP_OAUTH!, connectionId);
+              }
+            : undefined,
       });
 
       return serve(server, request, env, ctx);

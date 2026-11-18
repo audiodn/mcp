@@ -159,9 +159,40 @@ describe('worker: createFetchHandler', () => {
     expect(body.client_id_metadata_document_supported).toBe(true);
   });
 
-  it('/mcp without credentials returns 401 with resource_metadata', async () => {
+  it('/mcp without credentials allows knowledge session and advertises live tools', async () => {
     const res = await handler(
-      new Request('https://x/mcp', { method: 'POST' }),
+      new Request('https://x/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/list',
+          params: {},
+        }),
+      }),
+      env,
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body: any = await res.json();
+    expect(body.tools).toContain('adn_about');
+    expect(body.tools).toContain('adn_sign_in');
+    expect(body.tools).toContain('adn_create_track');
+  });
+
+  it('/mcp live tool call without credentials returns 401 with resource_metadata', async () => {
+    const res = await handler(
+      new Request('https://x/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/call',
+          params: { name: 'adn_create_track', arguments: { file_name: 'a.mp3' } },
+        }),
+      }),
       env,
       ctx,
     );
@@ -171,11 +202,17 @@ describe('worker: createFetchHandler', () => {
     expect(www).toMatch(/scope="account"/);
   });
 
-  it('/mcp with placeholder Authorization returns 401', async () => {
+  it('/mcp adn_sign_in without credentials returns 401 to start OAuth', async () => {
     const res = await handler(
       new Request('https://x/mcp', {
         method: 'POST',
-        headers: { Authorization: 'Bearer ${env:ADN_API_KEY}' },
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 3,
+          method: 'tools/call',
+          params: { name: 'adn_sign_in', arguments: {} },
+        }),
       }),
       env,
       ctx,
@@ -183,7 +220,30 @@ describe('worker: createFetchHandler', () => {
     expect(res.status).toBe(401);
   });
 
-  it('/mcp with legacy API key exposes live API + delete tools', async () => {
+  it('/mcp with placeholder Authorization is treated as unauthenticated knowledge session', async () => {
+    const res = await handler(
+      new Request('https://x/mcp', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ${env:ADN_API_KEY}',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/list',
+          params: {},
+        }),
+      }),
+      env,
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body: any = await res.json();
+    expect(body.tools).toContain('adn_sign_in');
+  });
+
+  it('/mcp with legacy API key is rejected (OAuth-only hosted)', async () => {
     const res = await handler(
       new Request('https://x/mcp', {
         method: 'POST',
@@ -192,11 +252,9 @@ describe('worker: createFetchHandler', () => {
       env,
       ctx,
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
     const body: any = await res.json();
-    expect(body.tools).toContain('adn_list_creators');
-    expect(body.tools).toContain('adn_delete_collection');
-    expect(body.tools).toContain('adn_create_track');
+    expect(body.message).toMatch(/OAuth account login/i);
   });
 
   it('/mcp with OAuth access token resolves the grant API key', async () => {

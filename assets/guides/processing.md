@@ -54,8 +54,9 @@ Pending codes:
 ## Webhooks
 
 Production apps can also react to Track Processing webhooks
-(`track.status_changed`, `track_file.created`, `track_file.failed`). MCP agents
-should not rely on registering webhooks through these tools.
+(`track.status_changed`, `track_file.created`, `track_file.failed`). Configure
+and test URLs with `adn_get_webhooks` / `adn_set_webhooks` / `adn_test_webhook`
+(full API Access key). See the `webhooks` guide.
 
 See also `output-types` / `adn_list_output_presets` for delivery indexes, and
 `workflows` for end-to-end examples.

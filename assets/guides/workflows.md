@@ -84,7 +84,9 @@ supported alternative from the guides.
 
 ## Manual staging checklist (live audio)
 
-Automated tests use fixtures only. On a staging org, verify once by hand:
+Automated tests use fixtures + the capability-coverage suite. Optional live smoke
+(`ADN_API_KEY=… npm test`) reads org / presets / webhooks only. On a staging org,
+verify once by hand:
 
 1. Create a track (note `stage: upload_url_issued`) and PUT a real audio file
 2. Poll `adn_get_processing` until `upload_accepted` is true
@@ -92,3 +94,7 @@ Automated tests use fixtures only. On a staging org, verify once by hand:
 4. If a waveform preset exists, wait `track_output` for that index (or confirm it stays optional while playback succeeds)
 5. Retry a create with the same `idempotency_key` and confirm no second row
 6. Cover wait for image B after uploading A then B → B’s colours; wait for A → `COVER_SUPERSEDED`
+7. Mint a Client-Side Player key → `adn_build_player_embed` → paste HTML loads
+8. From a “mobile app” mental model: Player key → `adn_create_play_session` → play `first_track.variants[].url`
+9. `adn_set_webhooks` a https receiver → `adn_test_webhook` returns delivered with `X-ADN-Event`
+10. `adn_get_plays` / `adn_get_delivery` return series for a known collection/output

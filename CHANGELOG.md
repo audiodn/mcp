@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.9.0
+
+- Default collection: omitted `collection_id` on create-track / upload-session /
+  list-tracks / find-track resolves via the API `"default"` sentinel (Library).
+- Account tools on the OAuth API Access key: plans, subscription, checkout,
+  billing portal, transactions, AI credits (balance, activity, rates, top-up).
+- Org output-preset mutations: create, limited update, soft-delete, and
+  apply-category. Cover-status read tool. List/revoke API keys (signing keys
+  stay dashboard-only; revoking the current MCP key drops the OAuth grant).
+- Upload handoff: create-track tools return `status: action_required` /
+  `PUT_AUDIO_BYTES` so agents PUT bytes themselves (no worker file ingest).
+- Hosted auth: knowledge tools and `adn_build_player_embed` work without an
+  account; live tools require OAuth; pasted API Access keys remain rejected.
+  README and English MCP docs updated. Bundled OpenAPI snapshot is 1.5.0.
+
+## 0.8.0
+
+- Live webhook tools: `adn_get_webhooks`, `adn_set_webhooks`, `adn_test_webhook`
+  over `GET|PUT /v1/organization/{id}/webhooks` and
+  `POST .../webhooks/test` (full API Access key; empty string clears; https
+  only). Bundled OpenAPI snapshot is 1.4.0.
+- Rewrote the `webhooks` guide for REST config + unsigned `X-ADN-Event`
+  delivery; server instructions point agents at the new tools.
+
+## 0.7.0
+
+- New guide topic `native-playback` (`adn_get_guide` /
+  `audiodn://guide/native-playback`): disambiguates play-on-app (Client-Side
+  Player key + play session), explicit long-lived URL, and pre-sign-without-
+  play-session (URL Signing key + timed-HMAC recipe; dashboard-only). No new
+  API endpoint.
+- Server instructions and `adn_create_play_session` /
+  `adn_create_client_key` descriptions reinforce the native/mobile default and
+  that URL Signing keys are not creatable via the API.
+
+## 0.6.0
+
+- New offline tool `adn_build_player_embed`: compose paste-ready
+  `<audiodn-player>` HTML from a scoped Client-Side Player key or
+  `play_session_id` (never a server API Access key). Available with or without
+  a live API client.
+- New guide topic `web-components` (`adn_get_guide` /
+  `audiodn://guide/web-components`) covering credentials, size scale
+  (`x-small` / `small` / `regular`), `variants` vs `outputs`, layouts, and CDN
+  drop-in. Server instructions point agents at the embed flow.
+
 ## 0.5.0
 
 - Canonical output-preset tools: `adn_list_output_presets`, `adn_get_output_preset`,

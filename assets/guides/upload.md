@@ -4,9 +4,12 @@ The upload lifecycle is multi-step. Creating a session or track alone uploads
 nothing. Distinguish these stages:
 
 1. **Track resource created** — a `track` row exists (`initialized`).
-2. **Upload URL issued** — `track_upload.upload_url` is returned (`stage:
-   upload_url_issued` from MCP create tools).
-3. **Audio bytes uploaded** — your client `PUT`s the file to that URL.
+2. **Upload URL issued** — MCP create tools return `status: action_required`,
+   `code: PUT_AUDIO_BYTES`, `stage: upload_url_issued`, and
+   `track_upload.upload_url`. The audio file is **not** stored yet.
+3. **Audio bytes uploaded** — your agent or app `PUT`s the file to that URL
+   with its own HTTP client (the MCP server cannot read local disks or fetch
+   remote files for you).
 4. **Upload accepted** — AudioDN sees the R2 object; status moves past
    `initialized` and `size` is set (`upload_accepted` in
    `adn_get_processing`).
@@ -27,14 +30,17 @@ nothing. Distinguish these stages:
    `track_upload.upload_url` (`PUT`). A cover image target is returned in
    `track_cover_upload`. Do this **once per file**.
    (MCP tool: `adn_create_track_in_upload_session`.)
-3. **Upload the bytes**: `PUT` the file to `track_upload.upload_url`. This is
-   done by your own code/client, not the MCP server. The MCP cannot access local
-   files or remote URLs for you.
+3. **Upload the bytes**: `PUT` the file to `track_upload.upload_url`. Treat the
+   create tool result as incomplete until this PUT succeeds. The MCP cannot
+   access local files or remote URLs for you.
 4. **Wait for readiness** with `adn_wait_for_processing` (see the processing
    guide). Creating the track is not success for "upload this song."
 
-One-shot alternative: `POST /v1/track` / `adn_create_track` also returns an
-upload URL with the same stages.
+One-shot alternative: `POST /v1/track` / `adn_create_track` also returns
+`PUT_AUDIO_BYTES` with the same stages. Omitting `collection_id` uses the
+organization default collection (`"default"` / Library). The same sentinel
+works for `adn_list_tracks` and `adn_find_resource` (type track) when you ask
+"what's in my library?" without naming a collection.
 
 Cover upload URLs expire. Re-mint with `POST /v1/collection/{id}/cover` or
 `POST /v1/track/{id}/cover`. Persist the returned `cloudflare_image_id` and wait

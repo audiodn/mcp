@@ -12,17 +12,37 @@ npm run dev:api
 # → http://127.0.0.1:8787
 ```
 
-**2. MCP worker** (from this repo):
+**2. Account app** (from `audiodn-mono/manage`) — login, signup, org, presets:
+
+```bash
+npm run dev
+# → http://localhost:3000/connect/mcp
+```
+
+Set `VITE_MCP_TXN_URL=http://127.0.0.1:8788/oauth/transaction` and
+`VITE_MCP_APPROVE_URL=http://127.0.0.1:8790/approve` in `manage/.env`.
+
+**3. Local approve bridge** (from this repo) — delivers the connection to this
+MCP worker. Org creation still uses the existing Supabase project; this only
+replaces the deployed function’s post to production MCP.
+
+```bash
+npm run dev:approve
+# → http://127.0.0.1:8790/approve
+```
+
+**4. MCP worker** (from this repo):
 
 ```bash
 cp .dev.vars.example .dev.vars
-# Edit .dev.vars: set ADN_API_KEY to a real API Access key from the dashboard.
 npm run dev:local
 # → http://127.0.0.1:8788/mcp
 ```
 
-`.dev.vars` points the worker at the local API (`ADN_API_BASE_URL`) and enables
-local OAuth (`MCP_DEV_MODE=1`, `MCP_ISSUER` / `MCP_RESOURCE` on port 8788).
+`.dev.vars` points the worker at the local API (`ADN_API_BASE_URL`) and at the
+local account app (`ACCOUNT_CONSENT_BASE_URL`, `MCP_DEV_MODE=0`). Set
+`MCP_DEV_MODE=1` only if you want the stub page that grants `ADN_API_KEY`
+with no user login.
 
 ## Auth once
 
@@ -30,8 +50,10 @@ local OAuth (`MCP_DEV_MODE=1`, `MCP_ISSUER` / `MCP_RESOURCE` on port 8788).
 npm run manual:auth
 ```
 
-Opens a browser to the worker’s `/oauth/dev-consent` page. Click **Allow**.
-Tokens are written to `manual/.env` as `ADN_MCP_ACCESS_TOKEN` (and refresh).
+With `MCP_DEV_MODE=0` this opens the local account app. Sign up or log in,
+finish onboarding, and Allow. Tokens are written to `manual/.env` as
+`ADN_MCP_ACCESS_TOKEN` (and refresh). With `MCP_DEV_MODE=1` it opens the stub
+consent page instead.
 
 ## Run scenarios
 

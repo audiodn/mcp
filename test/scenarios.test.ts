@@ -51,13 +51,17 @@ afterEach(() => {
 });
 
 describe('scenario: create stages and idempotency', () => {
-  it('create track returns upload_url_issued and does not claim bytes uploaded', async () => {
+  it('create track returns action_required PUT_AUDIO_BYTES and does not claim bytes uploaded', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         ok: true,
         track_id: 't1',
         stage: 'upload_url_issued',
-        track_upload: { upload_url: 'https://upload.example/signed', method: 'PUT' },
+        track_upload: {
+          upload_url: 'https://upload.example/signed',
+          method: 'PUT',
+          expires_at: '2099-01-01T00:00:00Z',
+        },
       }),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -66,11 +70,46 @@ describe('scenario: create stages and idempotency', () => {
       collection_id: '00000000-0000-4000-8000-000000000001',
       file_name: 'ep.mp3',
     });
+    expect(result.status).toBe('action_required');
+    expect(result.code).toBe('PUT_AUDIO_BYTES');
     expect(result.stage).toBe('upload_url_issued');
-    expect(result.message).toMatch(/PUT audio bytes/i);
+    expect(result.upload_url).toMatch(/upload\.example/);
+    expect(result.method).toBe('PUT');
+    expect(result.message).toMatch(/NOT stored yet/i);
     expect(result.message).not.toMatch(/uploaded successfully/i);
     const headers = fetchMock.mock.calls[0][1].headers;
     expect(headers['Idempotency-Key']).toBeUndefined();
+  });
+
+  it('create track without collection_id sends default sentinel', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ok: true,
+        track_id: 't-default',
+        stage: 'upload_url_issued',
+        track_upload: { upload_url: 'https://upload.example/signed', method: 'PUT' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { byName } = toolsByName();
+    const result: any = await byName.get('adn_create_track')!.handler({
+      file_name: 'song.mp3',
+    });
+    expect(result.status).toBe('action_required');
+    expect(result.code).toBe('PUT_AUDIO_BYTES');
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.collection_id).toBe('default');
+  });
+
+  it('create upload session without collection_id sends default sentinel', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ ok: true, upload_session_id: 'u1' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { byName } = toolsByName();
+    await byName.get('adn_create_upload_session')!.handler({});
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.collection_id).toBe('default');
   });
 
   it('sends Idempotency-Key only when the tool argument is set', async () => {

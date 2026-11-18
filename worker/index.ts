@@ -5,9 +5,10 @@ import { createFetchHandler, type Env, type Serve } from './handler.js';
 /**
  * Cloudflare Worker entry: serves the AudioDN MCP tool set over Streamable HTTP
  * at `/mcp` (stateless, no Durable Objects) plus OAuth discovery and token
- * endpoints. Authenticated sessions use OAuth access tokens (account login) or
- * a legacy API Access key. Grant material lives in KV, encrypted — OAuth tokens
- * are never forwarded to the AudioDN API.
+ * endpoints. Knowledge tools work without auth; live API tools require OAuth
+ * access tokens (account login / onboarding). Pasted API Access keys are
+ * rejected on the hosted endpoint. Grant material lives in KV, encrypted —
+ * OAuth tokens are never forwarded to the AudioDN API.
  */
 
 const corsOptions = {

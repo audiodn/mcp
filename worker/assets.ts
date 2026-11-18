@@ -15,6 +15,8 @@ import variantTypes from '../assets/guides/variant-types.md';
 import outputTypes from '../assets/guides/output-types.md';
 import webhooks from '../assets/guides/webhooks.md';
 import workflows from '../assets/guides/workflows.md';
+import webComponents from '../assets/guides/web-components.md';
+import nativePlayback from '../assets/guides/native-playback.md';
 
 export const version: string = (pkg as { version: string }).version;
 
@@ -29,6 +31,8 @@ const guides: Record<string, string> = {
   'output-types': outputTypes,
   webhooks,
   workflows,
+  'web-components': webComponents,
+  'native-playback': nativePlayback,
 };
 
 export const store = DocStore.fromData({

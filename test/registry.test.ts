@@ -64,6 +64,9 @@ describe('server registry', () => {
     expect(names).toContain('adn_create_track_variant');
     expect(names).toContain('adn_get_play_track');
     expect(names).toContain('adn_get_organization');
+    expect(names).toContain('adn_get_webhooks');
+    expect(names).toContain('adn_set_webhooks');
+    expect(names).toContain('adn_test_webhook');
     expect(names).toContain('adn_create_client_key');
     expect(names).toContain('adn_create_collection_cover');
     expect(names).toContain('adn_create_track_cover');
@@ -74,14 +77,16 @@ describe('server registry', () => {
     expect(names).toContain('adn_find_resource');
     expect(names).toContain('adn_get_processing');
     expect(names).toContain('adn_wait_for_processing');
+    expect(names).toContain('adn_build_player_embed');
   });
 
-  it('exposes only knowledge tools when no API client is configured', async () => {
+  it('exposes knowledge + embed tools when no API client is configured', async () => {
     harness = await connect(false);
     const { tools } = await harness.client.listTools();
     const names = tools.map((t) => t.name);
     expect(names).toContain('adn_about');
     expect(names).toContain('adn_search_docs');
+    expect(names).toContain('adn_build_player_embed');
     expect(names.some((n) => n.includes('create') || n.includes('list_creators'))).toBe(
       false,
     );
@@ -162,10 +167,23 @@ describe('resources', () => {
     expect(uris).toContain('audiodn://openapi.json');
     expect(uris).toContain('audiodn://llms-full.txt');
     expect(uris).toContain('audiodn://guide/authentication');
+    expect(uris).toContain('audiodn://guide/web-components');
+    expect(uris).toContain('audiodn://guide/native-playback');
 
     const openapi: any = await harness.client.readResource({
       uri: 'audiodn://openapi.json',
     });
     expect(openapi.contents?.[0]?.text).toMatch(/openapi/);
+
+    const guide: any = await harness.client.readResource({
+      uri: 'audiodn://guide/web-components',
+    });
+    expect(guide.contents?.[0]?.text).toMatch(/audiodn-player/);
+
+    const native: any = await harness.client.readResource({
+      uri: 'audiodn://guide/native-playback',
+    });
+    expect(native.contents?.[0]?.text).toMatch(/play session/i);
+    expect(native.contents?.[0]?.text).toMatch(/URL Signing/);
   });
 });

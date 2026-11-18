@@ -101,6 +101,9 @@ All endpoints are prefixed with `/v1/`. Complete schemas at https://audiodeliver
 ### Organizations
 - `GET /v1/organization/{organization_id}` — get organization
 - `PUT /v1/organization/{organization_id}` — update organization
+- `GET /v1/organization/{organization_id}/webhooks` — get webhook URLs (requires full API Access key)
+- `PUT /v1/organization/{organization_id}/webhooks` — set/clear webhook URLs; empty string clears (requires full API Access key)
+- `POST /v1/organization/{organization_id}/webhooks/test` — synchronously POST a synthetic sample event to a configured or supplied URL (requires full API Access key)
 
 ### Creators
 - `GET /v1/creator` — list creators (limit, offset)
@@ -159,7 +162,7 @@ When a file is uploaded to AudioDN, it moves through these stages:
 
 ### Webhooks
 
-The Track Processing webhook fires only on events of note — a terminal status, or when `track.files_completed_at` is set once all output presets (including optional/after-the-fact) have been attempted. Transitional statuses (`processing`, `fallback`, `fallback_processing`) and the initial `initialized` state are not delivered; use the Output webhook for per-output progress. It is configured in the organization dashboard (not via the API), and stored as `organization.webhook_url`.
+The Track Processing webhook fires only on events of note — a terminal status, or when `track.files_completed_at` is set once all output presets (including optional/after-the-fact) have been attempted. Transitional statuses (`processing`, `fallback`, `fallback_processing`) and the initial `initialized` state are not delivered; use the Output webhook for per-output progress. Configure URLs in the dashboard or via `PUT /v1/organization/{organization_id}/webhooks` (full API Access key); stored as `organization.webhook_url`. Test with `POST /v1/organization/{organization_id}/webhooks/test`.
 
 - **Transport**: HTTP `POST`, `Content-Type: application/json`, header `X-ADN-Event: track.status_changed`.
 - **Delivery**: fire-and-forget / at-least-once; ordering not guaranteed; currently unsigned. Make handlers idempotent and key on `track_id` + `status`. A track with optional variants may deliver twice: an early `ready`, then a files-complete event.
@@ -327,7 +330,6 @@ Every page below is also available as clean Markdown by appending `.md` to its U
 - https://audiodeliverynetwork.com/docs/components/recorder — Recorder web component
 - https://audiodeliverynetwork.com/docs/components/waveform — Waveform web component
 - https://audiodeliverynetwork.com/docs/mcp — MCP server
-- https://audiodeliverynetwork.com/docs/roadmap — Feature roadmap
 
 ## 13. Examples and runnable projects
 

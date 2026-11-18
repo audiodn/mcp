@@ -4,18 +4,22 @@
 #   audiodn-mono: npm run dev:api          → http://127.0.0.1:8787
 #   mcp:          npm run dev:local        → http://127.0.0.1:8788
 
-# Which AudioDN API this MCP worker calls
+# Which AudioDN API this MCP worker calls. Local API, not production.
 ADN_API_BASE_URL=http://127.0.0.1:8787
 
 # OAuth issuer / resource must match the URL clients hit
 MCP_ISSUER=http://127.0.0.1:8788
 MCP_RESOURCE=http://127.0.0.1:8788/mcp
 
-# Local-only: same-origin consent page that grants ADN_API_KEY below
-MCP_DEV_MODE=1
+# Account app from this checkout (manage on port 3000). /authorize sends the
+# browser here for login, signup, org, and output presets.
+ACCOUNT_CONSENT_BASE_URL=http://localhost:3000/connect/mcp
 
-# API Access key from the dashboard (Settings → API Keys). Used after OAuth
-# on the local worker; never committed.
+# 0 = real account onboarding. 1 = stub page that grants ADN_API_KEY below
+# (no user, no signup). Use 0 to test onboarding.
+MCP_DEV_MODE=0
+
+# Only used when MCP_DEV_MODE=1. Leave empty for the onboarding path.
 ADN_API_KEY=
 
 # Any local strings (not for production)

@@ -45,12 +45,12 @@ assert(
 );
 
 const about = JSON.parse((await client.callTool({ name: 'adn_about', arguments: {} })).content[0].text);
-assert(about.openapiVersion === '1.0.0', `unexpected openapi version: ${about.openapiVersion}`);
+assert(about.openapiVersion === '1.5.0', `unexpected openapi version: ${about.openapiVersion}`);
 
 const ops = JSON.parse(
   (await client.callTool({ name: 'adn_list_operations', arguments: {} })).content[0].text,
 );
-assert(ops.operations.length === 34, `expected 34 operations, got ${ops.operations.length}`);
+assert(ops.operations.length === 63, `expected 63 operations, got ${ops.operations.length}`);
 
 await client.close();
 console.log('SMOKE OK');

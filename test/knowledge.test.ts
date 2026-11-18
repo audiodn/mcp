@@ -10,14 +10,14 @@ const byName = new Map(tools.map((t) => [t.name, t]));
 describe('DocStore (offline)', () => {
   it('reports version and bundled openapi version', () => {
     const about = store.about();
-    expect(about.openapiVersion).toBe('1.3.0');
+    expect(about.openapiVersion).toBe('1.5.0');
     expect(about.docsSource).toBe('bundled snapshot');
     expect(about.apiBase).toContain('api.audiodelivery.net');
   });
 
   it('lists all canonical operations with operationIds', () => {
     const ops = store.listOperations();
-    expect(ops.length).toBe(40);
+    expect(ops.length).toBe(63);
     expect(ops.every((o) => o.operationId && o.method && o.path)).toBe(true);
     expect(ops.some((o) => o.path === '/v1/stream/{track_id}/{api_key}')).toBe(true);
     expect(ops.some((o) => o.path === '/v1/output_preset')).toBe(true);
@@ -88,5 +88,53 @@ describe('knowledge tools', () => {
   it('adn_get_guide rejects unknown topics via schema', () => {
     const parsed = byName.get('adn_get_guide')!.inputSchema.safeParse({ topic: 'nope' });
     expect(parsed.success).toBe(false);
+  });
+
+  it('serves the webhooks guide with REST config tools', () => {
+    const guide = byName.get('adn_get_guide')!.handler({
+      topic: 'webhooks',
+    }) as { topic: string; content: string };
+    expect(guide.topic).toBe('webhooks');
+    expect(guide.content).toMatch(/adn_get_webhooks/);
+    expect(guide.content).toMatch(/adn_set_webhooks/);
+    expect(guide.content).toMatch(/adn_test_webhook/);
+    expect(guide.content).toMatch(/X-ADN-Event/);
+    expect(guide.content).toMatch(/unsigned/i);
+  });
+
+  it('serves the web-components guide and finds it via search', () => {
+    const guide = byName.get('adn_get_guide')!.handler({
+      topic: 'web-components',
+    }) as { topic: string; content: string };
+    expect(guide.topic).toBe('web-components');
+    expect(guide.content).toMatch(/adn_build_player_embed/);
+    expect(guide.content).toMatch(/audiodn-player/);
+    expect(guide.content).toMatch(/x-small/);
+
+    const hits = store.searchDocs('audiodn-player embed variants', 5);
+    expect(hits.some((h) => h.source === 'guide' && /web-components/i.test(h.title))).toBe(
+      true,
+    );
+  });
+
+  it('serves the native-playback guide and finds it via search', () => {
+    const guide = byName.get('adn_get_guide')!.handler({
+      topic: 'native-playback',
+    }) as { topic: string; content: string };
+    expect(guide.topic).toBe('native-playback');
+    expect(guide.content).toMatch(/play session/i);
+    expect(guide.content).toMatch(/Client-Side.*Player/i);
+    expect(guide.content).toMatch(/URL Signing/i);
+    expect(guide.content).toMatch(/verify/);
+
+    const appHits = store.searchDocs('play track native mobile app', 5);
+    expect(
+      appHits.some((h) => h.source === 'guide' && /native-playback/i.test(h.title)),
+    ).toBe(true);
+
+    const signHits = store.searchDocs('pre-sign url without play session', 5);
+    expect(
+      signHits.some((h) => h.source === 'guide' && /native-playback/i.test(h.title)),
+    ).toBe(true);
   });
 });

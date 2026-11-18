@@ -65,6 +65,7 @@ function json(
     headers: {
       'content-type': 'application/json',
       'cache-control': 'no-store',
+      'access-control-allow-origin': '*',
       ...extraHeaders,
     },
   });

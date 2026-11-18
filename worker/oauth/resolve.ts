@@ -19,6 +19,8 @@ import { deleteGrant, getGrant, type OAuthKv } from './store.js';
 export interface ResolveAuthResult {
   apiKey?: string;
   connectionId?: string;
+  /** Dashboard API key id stored on the OAuth grant (for revoke). */
+  apiKeyId?: string;
   /** True when the request had a Bearer/API-key header that failed validation. */
   invalid?: boolean;
 }
@@ -69,7 +71,11 @@ export async function resolveRequestAuth(
       await deleteGrant(opts.kv, connectionId);
       return { invalid: true };
     }
-    return { apiKey, connectionId };
+    return {
+      apiKey,
+      connectionId,
+      apiKeyId: grant.apiKeyId,
+    };
   }
 
   // Legacy bring-your-own API Access key.

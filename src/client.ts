@@ -121,6 +121,28 @@ export class AdnClient {
     return this.request('PUT', `/v1/organization/${organizationId}`, body);
   }
 
+  getOrganizationWebhooks(organizationId: string) {
+    return this.request('GET', `/v1/organization/${organizationId}/webhooks`);
+  }
+
+  updateOrganizationWebhooks(
+    organizationId: string,
+    body: Record<string, unknown>,
+  ) {
+    return this.request('PUT', `/v1/organization/${organizationId}/webhooks`, body);
+  }
+
+  testOrganizationWebhook(
+    organizationId: string,
+    body: Record<string, unknown> = {},
+  ) {
+    return this.request(
+      'POST',
+      `/v1/organization/${organizationId}/webhooks/test`,
+      body,
+    );
+  }
+
   // --- API keys (client-side only; never create API Access keys) ---
   createApiKey(body: Record<string, unknown>) {
     return this.request('POST', `/v1/api_key`, body);
@@ -330,7 +352,7 @@ export class AdnClient {
 
   // --- Upload sessions ---
   createUploadSession(body: {
-    collection_id: string;
+    collection_id?: string;
     creator_id?: string;
     organization_index?: string;
     metadata?: Record<string, unknown>;
@@ -385,6 +407,77 @@ export class AdnClient {
 
   getVariant(variantId: string) {
     return this.request('GET', `/v1/output_preset/${variantId}`);
+  }
+
+  createOrgOutputPreset(body: Record<string, unknown>) {
+    return this.request('POST', `/v1/output_preset`, body);
+  }
+
+  updateOrgOutputPreset(outputPresetId: string, body: Record<string, unknown>) {
+    return this.request('PUT', `/v1/output_preset/${outputPresetId}`, body);
+  }
+
+  deleteOrgOutputPreset(outputPresetId: string) {
+    return this.request('DELETE', `/v1/output_preset/${outputPresetId}`);
+  }
+
+  applyOutputPresetCategory(body: { category_id: string }) {
+    return this.request('POST', `/v1/output_preset/apply_category`, body);
+  }
+
+  // --- API keys (metadata; create returns the secret once) ---
+  listApiKeys(params?: { limit?: number; offset?: number }) {
+    return this.request('GET', `/v1/api_key${listQuery(params)}`);
+  }
+
+  deleteApiKey(apiKeyId: string) {
+    return this.request('DELETE', `/v1/api_key/${apiKeyId}`);
+  }
+
+  // --- Account / billing (API Access key via mwAuthFlexible) ---
+  listPlans() {
+    return this.request('GET', `/v1/plan`);
+  }
+
+  getSubscription() {
+    return this.request('GET', `/v1/subscription`);
+  }
+
+  createSubscriptionCheckout(body: {
+    plan_id?: string;
+    plan_price_id?: string;
+    success_url: string;
+    cancel_url: string;
+  }) {
+    return this.request('POST', `/v1/subscription/checkout`, body);
+  }
+
+  createSubscriptionPortal(body: { return_url: string }) {
+    return this.request('POST', `/v1/subscription/portal`, body);
+  }
+
+  listTransactions(params?: { limit?: number; offset?: number }) {
+    return this.request('GET', `/v1/transaction${listQuery(params)}`);
+  }
+
+  getAiCredits() {
+    return this.request('GET', `/v1/ai_credits`);
+  }
+
+  getAiCreditActivity(params?: { limit?: number; offset?: number }) {
+    return this.request('GET', `/v1/ai_credits/activity${listQuery(params)}`);
+  }
+
+  getAiCreditRates() {
+    return this.request('GET', `/v1/ai_credits/rates`);
+  }
+
+  createAiCreditsTopup(body: {
+    amount_cents: number;
+    success_url: string;
+    cancel_url: string;
+  }) {
+    return this.request('POST', `/v1/ai_credits/topup`, body);
   }
 
   // --- Usage & reporting (read-only; JSON only, never CSV over MCP) ---
