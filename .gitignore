@@ -7,4 +7,5 @@ coverage/
 info.txt
 .dev.vars
 manual/.env
+manual/.env.*
 .wrangler/
